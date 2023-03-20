@@ -1,21 +1,15 @@
 from threading import Thread
 from time import sleep
+from src.strategies import BaseStrategyThread
+import logging
+import logging.config
 
-class Strategy1(Thread):
-    def __init__(self, api_client):
-        Thread.__init__(self)
-        self.api_client = api_client
+class Strategy1(BaseStrategyThread):
+    def __init__(self, name, exchange_client):
+        super().__init__(name, exchange_client)
 
     def run(self):
+        self.logger.info('starting ...')
         while True:
-            # Récupérer les informations sur le compte
-            account_info = self.api_client.get_account_info()
-
-            # Calculer la position à prendre
-            position = calculate_position(account_info)
-
-            # Passer un ordre sur Binance pour ouvrir une position
-            order = self.api_client.create_order(position)
-
-            # Attendre 1 minute avant de reprendre la boucle
-            sleep(60)
+            pass
+            raise NotImplementedError
