@@ -16,14 +16,15 @@ class BinanceAPIClient:
         query_string = urlencode(data)
         return hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    def _request(self, method, endpoint, params=None):
+    def _request(self, method, endpoint, params=None, signed=True):
         url = self.base_url + endpoint
         if params is None:
             params = {}
 
-        params['timestamp'] = int(time.time() * 1000)
-        params['recvWindow'] = 5000
-        params['signature'] = self._generate_signature(params)
+        if signed:
+            params['timestamp'] = int(time.time() * 1000)
+            params['recvWindow'] = 5000
+            params['signature'] = self._generate_signature(params)
 
         headers = {
             'X-MBX-APIKEY': self.api_key
@@ -32,6 +33,7 @@ class BinanceAPIClient:
         response = requests.request(method, url, headers=headers, params=params)
 
         return response.json()
+
 
     def get_account_info(self):
         endpoint = "/api/v3/account"
@@ -81,3 +83,17 @@ class BinanceAPIClient:
 
         top_assets = sorted(assets.items(), key=lambda x: x[1], reverse=True)[:10]
         print(top_assets)
+
+    def get_historical_data(self, symbol, interval, days):
+        endpoint = "/api/v3/klines"
+        now = int(time.time() * 1000)
+        ms_per_day = 1000 * 60 * 60 * 24
+        start_time = now - (days * ms_per_day)
+        
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'startTime': start_time,
+        }
+        
+        return self._request('GET', endpoint, params, signed=False)

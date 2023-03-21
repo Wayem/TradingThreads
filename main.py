@@ -20,6 +20,7 @@ class MainStep():
 def runstep(name, func):
     return MainStep(name).run(func)
 
+
 # NOT GENERIC #
 ##################################################
 if __name__ == "__main__":
@@ -28,11 +29,8 @@ if __name__ == "__main__":
     client = BinanceAPIClient(kp_secrets['BNB_API_KEY'], kp_secrets['BNB_SECRET_KEY'])
     runstep('binance test', client.print_top_assets)
 
-    s1 = Strategy1('s1', client)
+    s1 = Strategy1('backtest combined', client)
 
-    try:
-        runstep('s1', s1.run)
-    except Exception as e:
-        logging.error(f"An error occurred in s1: %s", e)
+    runstep('s1', s1.run)
 
-    logger.info('\n\nDone.')
+    logger.info('Done.')
