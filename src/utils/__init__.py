@@ -2,16 +2,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
+COLUMNS = ['Open time', 'Open', 'High', 'Low', 'Close', 'Volume', 'Close time', 'Quote asset volume', 'Number of trades', 'Taker buy base asset volume', 'Taker buy quote asset volume', 'Ignore']
 def make_df(raw_historical_data):
     # Create a pandas DataFrame from the historical data
-    df = pd.DataFrame(raw_historical_data, columns=['Open time', 'Open', 'High', 'Low', 'Close', 'Volume', 'Close time', 'Quote asset volume', 'Number of trades', 'Taker buy base asset volume', 'Taker buy quote asset volume', 'Ignore'])
+    df = pd.DataFrame(raw_historical_data, columns=COLUMNS)
     
     # Convert the timestamp to a readable datetime format
     df['Open time'] = pd.to_datetime(df['Open time'], unit='ms')
     df['Close time'] = pd.to_datetime(df['Close time'], unit='ms')
     
     # Set the index to the 'Close time' column
-    df.set_index('Close time', inplace=True)
+    # df.set_index('Close time', inplace=True)
     
     # Convert the 'Close' price column to a numeric type
     df['Open'] = pd.to_numeric(df['Open'])

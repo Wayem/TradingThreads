@@ -3,6 +3,8 @@ import hmac
 import hashlib
 import time
 from urllib.parse import urlencode
+import pandas as pd
+from src.utils import make_df
 
 class BinanceAPIClient:
     """Client d'API pour Binance"""
@@ -96,4 +98,5 @@ class BinanceAPIClient:
             'startTime': start_time,
         }
         
-        return self._request('GET', endpoint, params, signed=False)
+        data = self._request('GET', endpoint, params, signed=False)
+        return make_df(data)
