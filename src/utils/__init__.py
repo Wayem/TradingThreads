@@ -12,14 +12,13 @@ def make_df(raw_historical_data):
     df['Close time'] = pd.to_datetime(df['Close time'], unit='ms')
     
     # Set the index to the 'Close time' column
-    # df.set_index('Close time', inplace=True)
+    df.set_index('Close time', inplace=True)
     
     # Convert the 'Close' price column to a numeric type
     df['Open'] = pd.to_numeric(df['Open'])
     df['High'] = pd.to_numeric(df['High'])
     df['Low'] = pd.to_numeric(df['Low'])
     df['Close'] = pd.to_numeric(df['Close'])
-
     return df
 
 def plot_close_price_with_signals(historical_df, signals_df):

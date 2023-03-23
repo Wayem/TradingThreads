@@ -36,39 +36,35 @@ class Pyramid(BaseStrategyThread):
             if not self.in_position and self.buy_condition(df, i):  # Insérez vos conditions d'achat basées sur des indicateurs techniques ici
                 self.position_value = self.initial_investment
                 self.in_position = True
-                df.at[i, 'Buy'] = True
+                df.iat[i, df.columns.get_loc('Buy')] = True
 
             if self.in_position:
-                current_value = self.position_value * (1 + (df.at[i, 'Close'] - df.at[i - 1, 'Close']) / df.at[i - 1, 'Close'])
+                current_value = self.position_value * (1 + (df.iat[i, df.columns.get_loc('Close')] - df.iat[i - 1, df.columns.get_loc('Close')]) / df.iat[i - 1, df.columns.get_loc('Close')])
 
                 if current_value >= self.position_value * (1 + sell_threshold):
                     sell_amount = self.position_value * sell_threshold
                     self.position_value -= sell_amount
-                    df.at[i, 'Sell'] = True
+                    df.iat[i, df.columns.get_loc('Sell')] = True
 
                 if current_value <= self.position_value * (1 - stop_loss_threshold):
                     self.position_value = 0
                     self.in_position = False
-                    df.at[i, 'Sell'] = True
+                    df.iat[i, df.columns.get_loc('Sell')] = True
 
         return df
 
     def buy_condition(self, df, index):
         # Exemple de condition d'achat simple : acheter lorsque le prix de clôture est supérieur à la moyenne mobile à 20 jours
         # Remplacez cette condition par les conditions d'achat de votre choix en fonction des indicateurs techniques
-        previous_index = df.index[df.index.get_loc(index) - 1]
-        return df.at[index, 'Close'] > df.at[previous_index, 'Close']
-
+        # previous_index = df.index[df.index.get_loc(index) - 1]
+        return df.iat[index, df.columns.get_loc('Close')] > df.iat[index - 1, df.columns.get_loc('Close')]
 
     def run(self):
         while not self.exit_flag.is_set():
             self.logger.info('starting ...')
 
             self.logger.info('fetching historical data ...')
-            data = self.exchange_client.get_historical_data(self.symbol, self.interval, self.days_of_historical_data)
-
-            self.logger.info('making df ...')
-            df = make_df(data)
+            df = self.exchange_client.get_historical_data(self.symbol, self.interval, self.days_of_historical_data)
             signals = self.apply_incremental_profit_strategy(df)
             self.logger.info('plotting ...')
             plot_close_price_with_signals(df, signals)
