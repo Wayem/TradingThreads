@@ -10,20 +10,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from src.utils import plot_close_price_with_signals
 
-class Pyramid(BaseStrategyThread):
+class PlaceOcoWhenItsTime(BaseStrategyThread):
     def __init__(self, name, exchange_client):
         super().__init__(name, exchange_client)
 
         self.exchange_client = exchange_client
-        self.symbol = "BTCUSDT"
+        self.token = "BTC"
+        self.base_token = "EUR"
+        self.symbol = self.token + self.base_token
+
         self.interval = "15m"
         self.days_of_historical_data = 2
         
         self.initial_investment = 1000
-        self.position_value = 0
-        self.in_position = False
 
-    def apply_incremental_profit_strategy(self, df, buy_threshold=0.01, sell_threshold=0.01, stop_loss_threshold=0.05):
+    def apply_strategy_to_df(self, df, take_profit_threshold=0.01, sell_threshold=0.05, stop_loss_threshold=0.15):
         
         # Vous pouvez ajouter d'autres indicateurs techniques ici en utilisant TA-Lib, par exemple :
         # df['SMA'] = talib.SMA(df['Close'], timeperiod=20)
@@ -33,30 +34,17 @@ class Pyramid(BaseStrategyThread):
         df['Sell'] = False
 
         for i in range(1, len(df)):
-            if not self.in_position and self.buy_condition(df, i):  # Insérez vos conditions d'achat basées sur des indicateurs techniques ici
-                self.position_value = self.initial_investment
-                self.in_position = True
+            if self.buy_condition(df, i):
                 df.iat[i, df.columns.get_loc('Buy')] = True
-
-            if self.in_position:
-                current_value = self.position_value * (1 + (df.iat[i, df.columns.get_loc('Close')] - df.iat[i - 1, df.columns.get_loc('Close')]) / df.iat[i - 1, df.columns.get_loc('Close')])
-
-                if current_value >= self.position_value * (1 + sell_threshold):
-                    sell_amount = self.position_value * sell_threshold
-                    self.position_value -= sell_amount
-                    df.iat[i, df.columns.get_loc('Sell')] = True
-
-                if current_value <= self.position_value * (1 - stop_loss_threshold):
-                    self.position_value = 0
-                    self.in_position = False
-                    df.iat[i, df.columns.get_loc('Sell')] = True
+                # self.in_position = True
+                # # BUY #
+                self.logger.info(f'OCO WANTS TO GO on {self.token}')
+                break
+                # BUY #
 
         return df
 
     def buy_condition(self, df, index):
-        # Exemple de condition d'achat simple : acheter lorsque le prix de clôture est supérieur à la moyenne mobile à 20 jours
-        # Remplacez cette condition par les conditions d'achat de votre choix en fonction des indicateurs techniques
-        # previous_index = df.index[df.index.get_loc(index) - 1]
         return df.iat[index, df.columns.get_loc('Close')] > df.iat[index - 1, df.columns.get_loc('Close')]
 
     def run(self):
@@ -65,7 +53,7 @@ class Pyramid(BaseStrategyThread):
 
             self.logger.info('fetching historical data ...')
             df = self.exchange_client.get_historical_data(self.symbol, self.interval, self.days_of_historical_data)
-            signals = self.apply_incremental_profit_strategy(df)
+            signals = self.apply_strategy_to_df(df)
             self.logger.info('plotting ...')
             plot_close_price_with_signals(df, signals)
             self.stop()

@@ -3,7 +3,7 @@ import yaml
 import logging
 
 from src.utils.kp_secrets import extract_kp_secrets
-from src.strategies.strategy2 import Pyramid
+from src.strategies.strategy2 import PlaceOcoWhenItsTime
 from src.api import BinanceAPIClient
 
 logging.basicConfig(level = logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     client = BinanceAPIClient(kp_secrets['BNB_API_KEY'], kp_secrets['BNB_SECRET_KEY'])
     runstep('binance test', client.print_top_assets)
 
-    s2 = Pyramid('s2', client)
+    s2 = PlaceOcoWhenItsTime('s2', client)
 
     runstep('s2', s2.run)
 

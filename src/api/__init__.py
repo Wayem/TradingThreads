@@ -4,7 +4,11 @@ import hashlib
 import time
 from urllib.parse import urlencode
 import pandas as pd
+import logging
 from src.utils import make_df
+
+logging.basicConfig(level = logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class BinanceAPIClient:
     """Client d'API pour Binance"""
@@ -13,6 +17,12 @@ class BinanceAPIClient:
         self.api_key = api_key
         self.api_secret = api_secret
         self.base_url = "https://api.binance.com"
+
+        # cache expires 15 min
+        self.account_info = None
+        self.account_info_updated = None
+        self.prices = None
+        self.prices_updated = None
 
     def _generate_signature(self, data):
         query_string = urlencode(data)
@@ -37,19 +47,37 @@ class BinanceAPIClient:
         return response.json()
 
 
-    def get_account_info(self):
+    def _get_account_info(self):
         endpoint = "/api/v3/account"
-        return self._request("GET", endpoint)
+
+
+        # maybe cached ?
+        current_time = time.time()
+        if self.account_info_updated and ((current_time - self.account_info_updated) / 60) < 15: # 15 is minutes
+            logger.info(f'using cached account info')
+        else:
+            # update
+            self.account_info = self._request("GET", endpoint)
+            self.account_info_updated = current_time
+        
+        return self.account_info
     
-    def get_all_tickers(self):
+    def _get_all_tickers(self):
         url = f"{self.base_url}/api/v3/ticker/price"
-        response = requests.get(url)
-        return response.json()
+
+        # maybe cached ?
+        current_time = time.time()
+        if self.prices_updated and ((current_time - self.account_info_updated) / 60) < 15: # 15 is minutes
+            logger.info(f'using cached prices')
+        else:
+            self.prices = requests.get(url).json()
+            self.prices_updated = current_time
+        return self.prices
     
     def print_top_assets(self):
-        account_info = self.get_account_info()
+        account_info = self._get_account_info()
         balances = account_info['balances']
-        prices = self.get_all_tickers()
+        prices = self._get_all_tickers()
 
         # Calculate the total balance in euros
         total_balance_eur = 0
@@ -100,3 +128,111 @@ class BinanceAPIClient:
         
         data = self._request('GET', endpoint, params, signed=False)
         return make_df(data)
+    
+    def get_asset_value_in_currency(self, token, currency):
+        account_info = self._get_account_info()
+        balances = account_info['balances']
+        prices = self._get_all_tickers()
+
+        # Find the balance of the specified token
+        token_balance = 0
+        for balance in balances:
+            asset = balance['asset']
+            if asset == token:
+                free = float(balance['free'])
+                locked = float(balance['locked'])
+                token_balance = free + locked
+                break
+
+        # Calculate the token value in the target currency
+        token_value_in_currency = 0
+        if token == currency:
+            token_value_in_currency = token_balance
+        else:
+            for price in prices:
+                if price['symbol'] == token + currency:
+                    token_value_in_currency = token_balance * float(price['price'])
+                    break
+
+        return token_value_in_currency
+    
+    def place_gtc_order(self, order_type, side, token, base_symbol, *, quantity=None, amount_base=None, limit_price=None, stop_loss_price=None):
+        if token == base_symbol:
+            raise ValueError("Cannot trade a symbol against itself.")
+
+        if side not in ['BUY', 'SELL']:
+            raise ValueError("Invalid order side. Must be 'BUY' or 'SELL'.")
+
+        if order_type not in ['MARKET', 'LIMIT', 'STOP_LOSS_LIMIT']:
+            raise ValueError("Invalid order type. Must be 'MARKET', 'LIMIT', or 'STOP_LOSS_LIMIT'.")
+
+        if order_type == 'LIMIT' and limit_price is None:
+            raise ValueError("Limit price must be provided for LIMIT orders.")
+
+        if order_type == 'STOP_LOSS_LIMIT' and (limit_price is None or stop_loss_price is None):
+            raise ValueError("Limit price and stop-loss price must be provided for STOP_LOSS_LIMIT orders.")
+
+        if quantity is None and amount_base is None:
+            raise ValueError("Either quantity or amount in base symbol must be provided.")
+
+        # Get the current token price in the base symbol
+        prices = self._get_all_tickers()
+        token_price_base = None
+        for price in prices:
+            if price['symbol'] == token + base_symbol:
+                token_price_base = float(price['price'])
+                break
+
+        if token_price_base is None:
+            raise ValueError(f"Token price for {token}{base_symbol} not found.")
+
+        if amount_base is not None:
+            # Calculate the quantity to buy/sell using the amount in base symbol
+            quantity = amount_base / token_price_base
+
+        # Prepare the order parameters
+        endpoint = "/api/v3/order"
+        params = {
+            'symbol': token + base_symbol,
+            'side': side,
+            'type': order_type,
+            'quantity': round(quantity, 8),  # Round the quantity to 8 decimal places
+        }
+
+        if order_type in ['LIMIT', 'STOP_LOSS_LIMIT']:
+            params['price'] = f"{limit_price:.8f}"
+            params['timeInForce'] = 'GTC'
+
+        if order_type == 'STOP_LOSS_LIMIT':
+            params['stopPrice'] = f"{stop_loss_price:.8f}"
+
+        # Execute the order
+        response = self._request("POST", endpoint, params)
+        
+        if response.get("code"):
+            raise Exception(f"Error {response['code']}: {response['msg']}")
+        
+def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price, stop_limit_price, take_profit_price):
+    if side not in ['BUY', 'SELL']:
+        raise ValueError("Invalid order side. Must be 'BUY' or 'SELL'.")
+
+    if token == base_symbol:
+        raise ValueError("Cannot trade a symbol against itself.")
+
+    # Prepare the OCO order parameters
+    endpoint = "/api/v3/order/oco"
+    params = {
+        'symbol': token + base_symbol,
+        'side': side,
+        'quantity': round(quantity, 8),  # Round the quantity to 8 decimal places
+        'stopPrice': f"{stop_loss_price:.8f}",
+        'stopLimitPrice': f"{stop_limit_price:.8f}",
+        'stopLimitTimeInForce': 'GTC',
+        'price': f"{take_profit_price:.8f}",
+    }
+
+    # Execute the OCO order
+    response = self._request("POST", endpoint, params)
+
+    if response.get("code"):
+        raise Exception(f"Error {response['code']}: {response['msg']}")
