@@ -21,27 +21,41 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
         self.interval = "15m"
         self.days_of_historical_data = 2
-        
+
         self.initial_investment = 1000
 
-    def apply_strategy_to_df(self, df, take_profit_threshold=0.01, sell_threshold=0.05, stop_loss_threshold=0.15):
+        self.take_profit_threshold=0.01
+        self.stop_loss_threshold=0.03
+
+    def apply_strategy_to_df(self, df):
         
         # Vous pouvez ajouter d'autres indicateurs techniques ici en utilisant TA-Lib, par exemple :
         # df['SMA'] = talib.SMA(df['Close'], timeperiod=20)
         
         # Initialiser les signaux d'achat et de vente
         df['Buy'] = False
-        df['Sell'] = False
+        df['Stop loss'] = False
+        df['Take profit'] = False
+
+        in_position = False
+        last_buy_price = None
 
         for i in range(1, len(df)):
-            if self.buy_condition(df, i):
+            if not(in_position) and self.buy_condition(df, i):
                 df.iat[i, df.columns.get_loc('Buy')] = True
-                # self.in_position = True
-                # # BUY #
-                self.logger.info(f'OCO WANTS TO GO on {self.token}')
-                break
-                # BUY #
 
+                in_position = True
+                last_buy_price = df.iat[i, df.columns.get_loc('Close')]
+
+            elif in_position:
+                if df.iat[i, df.columns.get_loc('Low')] <= last_buy_price * (1 - self.stop_loss_threshold):
+                    df.iat[i, df.columns.get_loc('Stop loss')] = True
+                    in_position = False
+
+                elif df.iat[i, df.columns.get_loc('High')] >= last_buy_price * (1 + self.take_profit_threshold):
+                    df.iat[i, df.columns.get_loc('Take profit')] = True
+                    in_position = False
+        #df.to_csv("toto.csv")
         return df
 
     def buy_condition(self, df, index):

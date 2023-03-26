@@ -30,10 +30,14 @@ def plot_close_price_with_signals(historical_df, signals_df):
     ax.legend(loc='best')
 
     # Plot Buy signals
-    ax.scatter(signals_df[signals_df['Buy']].index, historical_df.loc[signals_df['Buy']].Close, label='Buy', marker='^', color='g')
+    ax.scatter(signals_df[signals_df['Buy']].index, historical_df.loc[signals_df['Buy']].Close, label='Buy', marker='^', color='black')
 
-    # Plot Sell signals
-    ax.scatter(signals_df[signals_df['Sell']].index, historical_df.loc[signals_df['Sell']].Close, label='Sell', marker='x', color='r')
+    # Plot SL signals
+    ax.scatter(signals_df[signals_df['Stop loss']].index, historical_df.loc[signals_df['Stop loss']].Close, label='Stop loss', marker='v', color='r')
+
+    # Plot TP signals
+    ax.scatter(signals_df[signals_df['Take profit']].index, historical_df.loc[signals_df['Take profit']].Close, label='Take profit', marker='v', color='g')
+
 
     # Format x-axis
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
