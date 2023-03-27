@@ -6,23 +6,42 @@ from urllib.parse import urlencode
 import pandas as pd
 import logging
 from src.utils import make_df
+import time
+import cachetools
+import functools
 
 logging.basicConfig(level = logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class BinanceAPIClient:
-    """Client d'API pour Binance"""
+## CACHE SYSTEM ##
+# Create a cache with a maximum size of 100 and a time-to-live (TTL) of 300 seconds
+cache = cachetools.TTLCache(maxsize=100, ttl=300)
 
+def cache_results(func):
+    @functools.wraps(func)
+    def wrapper(self, *args):
+        cache_key = (func.__name__, *args)
+
+        try:
+            result = cache[cache_key]
+            logger.warning(f"Cache exists for function {func.__name__} with arguments {args}")
+        except KeyError:
+            #logger.warning(f"Cache does not exist for function {func.__name__} with arguments {args}")
+            result = func(self, *args)
+            cache[cache_key] = result
+
+        return result
+    return wrapper
+## CACHE SYSTEM ##
+
+class BinanceAPIClient:
+    # other code ...
+    """Client d'API pour Binance"""
     def __init__(self, api_key, api_secret):
         self.api_key = api_key
         self.api_secret = api_secret
         self.base_url = "https://api.binance.com"
-
-        # cache expires 15 min
-        self.account_info = None
-        self.account_info_updated = None
-        self.prices = None
-        self.prices_updated = None
+        self.limit_klines_rows = 500
 
     def _generate_signature(self, data):
         query_string = urlencode(data)
@@ -46,33 +65,33 @@ class BinanceAPIClient:
 
         return response.json()
 
-
+    @cache_results
     def _get_account_info(self):
         endpoint = "/api/v3/account"
-
-
-        # maybe cached ?
-        current_time = time.time()
-        if self.account_info_updated and ((current_time - self.account_info_updated) / 60) < 15: # 15 is minutes
-            logger.info(f'using cached account info')
-        else:
-            # update
-            self.account_info = self._request("GET", endpoint)
-            self.account_info_updated = current_time
-        
-        return self.account_info
+        return self._request("GET", endpoint)
     
+    @cache_results
     def _get_all_tickers(self):
         url = f"{self.base_url}/api/v3/ticker/price"
+        return requests.get(url).json()
+    
+    @cache_results
+    def get_historical_data(self, symbol, interval, start_time, end_time=None):
+        if end_time is None:
+            end_time = int(time.time() * 1000)
 
-        # maybe cached ?
-        current_time = time.time()
-        if self.prices_updated and ((current_time - self.account_info_updated) / 60) < 15: # 15 is minutes
-            logger.info(f'using cached prices')
-        else:
-            self.prices = requests.get(url).json()
-            self.prices_updated = current_time
-        return self.prices
+        endpoint = "/api/v3/klines"
+        
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'startTime': start_time,
+            'endTime': end_time
+        }
+        
+        data = self._request('GET', endpoint, params, signed=False)
+        assert len(data) < self.limit_klines_rows, f'get_historical_data() hit request size limit'
+        return make_df(data)
     
     def print_top_assets(self):
         account_info = self._get_account_info()
@@ -114,21 +133,6 @@ class BinanceAPIClient:
         top_assets = sorted(assets.items(), key=lambda x: x[1], reverse=True)[:10]
         print(top_assets)
 
-    def get_historical_data(self, symbol, interval, days):
-        endpoint = "/api/v3/klines"
-        now = int(time.time() * 1000)
-        ms_per_day = 1000 * 60 * 60 * 24
-        start_time = now - (days * ms_per_day)
-        
-        params = {
-            'symbol': symbol,
-            'interval': interval,
-            'startTime': start_time,
-        }
-        
-        data = self._request('GET', endpoint, params, signed=False)
-        return make_df(data)
-    
     def get_asset_value_in_currency(self, token, currency):
         account_info = self._get_account_info()
         balances = account_info['balances']
@@ -156,7 +160,7 @@ class BinanceAPIClient:
 
         return token_value_in_currency
     
-    def place_gtc_order(self, order_type, side, token, base_symbol, *, quantity=None, amount_base=None, limit_price=None, stop_loss_price=None):
+    def place_vanilla_order(self, order_type, side, token, base_symbol, *, quantity=None, amount_base=None, limit_price=None, stop_loss_price=None):
         if token == base_symbol:
             raise ValueError("Cannot trade a symbol against itself.")
 

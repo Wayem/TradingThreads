@@ -1,6 +1,19 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from datetime import datetime
+import talib
+
+def nb_days_YTD():
+    # Get the current date
+    today = datetime.now()
+
+    # Calculate the start of the year
+    start_of_year = datetime(today.year, 1, 1)
+
+    # Calculate the number of days since the start of the year
+    days_since_start_of_year = (today - start_of_year).days
+    return days_since_start_of_year
 
 COLUMNS = ['Open time', 'Open', 'High', 'Low', 'Close', 'Volume', 'Close time', 'Quote asset volume', 'Number of trades', 'Taker buy base asset volume', 'Taker buy quote asset volume', 'Ignore']
 def make_df(raw_historical_data):
@@ -46,3 +59,11 @@ def plot_close_price_with_signals(historical_df, signals_df):
     plt.xlabel('Date')
     plt.legend(loc='best')
     plt.show()
+
+def add_indicators(df):
+
+    df['RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
+    df['Short_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=12)
+    df['Long_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=26)
+
+    return df
