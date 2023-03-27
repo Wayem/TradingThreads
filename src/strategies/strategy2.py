@@ -25,12 +25,12 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         self.days_of_long_interval = nb_days_YTD() #nb_days_YTD() too long ! 
 
         self.short_interval = "15m"
-        self.days_of_short_interval = 2
+        self.days_of_short_interval = 4
 
         self.initial_investment = 1000
 
-        self.take_profit_threshold=0.01
-        self.stop_loss_threshold=0.03
+        self.take_profit_threshold=0.005
+        self.stop_loss_threshold=0.015
 
         ## 1. Long-term trend condition
         ## Récupérer le graph '1D'
@@ -100,7 +100,7 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         rsi_oversold = df.iat[index, rsi_col] < 30
 
         # Buy if both conditions are met
-        return self.long_term_uptrend and (short_above_long and rsi_oversold)
+        return self.long_term_uptrend and short_above_long #and rsi_oversold
 
     def run(self):
         while not self.exit_flag.is_set():
