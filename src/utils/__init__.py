@@ -67,3 +67,21 @@ def add_indicators(df):
     df['Long_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=26)
 
     return df
+
+def interval_to_milliseconds(interval: str) -> int:
+    """Convert a string interval to the number of milliseconds"""
+    ms = None
+    if interval.endswith("m"):
+        ms = int(interval[:-1]) * 60 * 1000
+    elif interval.endswith("h"):
+        ms = int(interval[:-1]) * 60 * 60 * 1000
+    elif interval.endswith("d"):
+        ms = int(interval[:-1]) * 24 * 60 * 60 * 1000
+    elif interval.endswith("w"):
+        ms = int(interval[:-1]) * 7 * 24 * 60 * 60 * 1000
+    elif interval.endswith("M"):
+        ms = int(interval[:-1]) * 30 * 24 * 60 * 60 * 1000
+    else:
+        raise Exception("Invalid interval")
+
+    return ms

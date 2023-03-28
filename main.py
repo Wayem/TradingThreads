@@ -11,6 +11,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+dir_path = os.path.dirname(os.path.realpath(__file__))
+logs_dir = os.path.join(dir_path, 'logs')
+if not os.path.exists(logs_dir):
+    os.makedirs(logs_dir)
+
 
 class MainStep:
     def __init__(self, name):

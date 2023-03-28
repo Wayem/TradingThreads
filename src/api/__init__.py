@@ -5,7 +5,7 @@ import time
 from urllib.parse import urlencode
 import pandas as pd
 import logging
-from src.utils import make_df
+from src.utils import make_df, interval_to_milliseconds
 import time
 import cachetools
 import functools
@@ -240,3 +240,35 @@ def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price
 
     if response.get("code"):
         raise Exception(f"Error {response['code']}: {response['msg']}")
+
+    def get_historical_data_range(self, symbol: str, interval: str, start_time: int, end_time: int, chunk_size: int = 500) -> pd.DataFrame:
+        # Your new function that uses your existing function to get historical data beyond Binance API limitations
+
+        # Convert the interval string to the number of milliseconds
+        ms_interval = interval_to_milliseconds(interval)
+
+        # Calculate the number of chunks needed to cover the specified time range
+        my_chunks = ((end_time - start_time) // (ms_interval * chunk_size)) + 1
+
+        # Initialize an empty list to store the results
+        results = []
+
+        # Loop over each chunk and call the get_historical_data function to retrieve data
+        for i in range(my_chunks):
+            # Calculate the start and end time for the current chunk
+            chunk_start_time = start_time + i * ms_interval * chunk_size
+            chunk_end_time = min(end_time, chunk_start_time + ms_interval * chunk_size)
+
+            # Call the get_historical_data function to retrieve data for the current chunk
+            chunk_data = self.get_historical_data(symbol, interval, chunk_start_time, chunk_end_time)
+
+            # Append the chunk data to the results list
+            results.append(chunk_data)
+
+        # Concatenate all the results into a big dataframe
+        df = pd.concat(results)
+
+        # Save the dataframe to a CSV file
+        df.to_csv('historical_data.csv', index=False)
+
+        return df
