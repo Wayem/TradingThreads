@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import requests
 import hmac
 import hashlib
@@ -10,12 +12,13 @@ import time
 import cachetools
 import functools
 
-logging.basicConfig(level = logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 ## CACHE SYSTEM ##
 # Create a cache with a maximum size of 100 and a time-to-live (TTL) of 300 seconds
 cache = cachetools.TTLCache(maxsize=100, ttl=300)
+
 
 def cache_results(func):
     @functools.wraps(func)
@@ -26,22 +29,26 @@ def cache_results(func):
             result = cache[cache_key]
             logger.warning(f"Cache exists for function {func.__name__} with arguments {args}")
         except KeyError:
-            #logger.warning(f"Cache does not exist for function {func.__name__} with arguments {args}")
+            # logger.warning(f"Cache does not exist for function {func.__name__} with arguments {args}")
             result = func(self, *args)
             cache[cache_key] = result
 
         return result
+
     return wrapper
+
+
 ## CACHE SYSTEM ##
 
 class BinanceAPIClient:
     # other code ...
     """Client d'API pour Binance"""
+
     def __init__(self, api_key, api_secret):
         self.api_key = api_key
         self.api_secret = api_secret
         self.base_url = "https://api.binance.com"
-        self.limit_klines_rows = 500
+        self.k_lines_limit = 500
 
     def _generate_signature(self, data):
         query_string = urlencode(data)
@@ -63,36 +70,41 @@ class BinanceAPIClient:
 
         response = requests.request(method, url, headers=headers, params=params)
 
+        if response.status_code != 200:
+            raise Exception(f'Request failed with status code {response.status_code}: {response.content}')
+
         return response.json()
 
     @cache_results
     def _get_account_info(self):
         endpoint = "/api/v3/account"
         return self._request("GET", endpoint)
-    
+
     @cache_results
     def _get_all_tickers(self):
         url = f"{self.base_url}/api/v3/ticker/price"
         return requests.get(url).json()
-    
+
     @cache_results
-    def get_historical_data(self, symbol, interval, start_time, end_time=None):
-        if end_time is None:
-            end_time = int(time.time() * 1000)
+    def get_historical_data(self, symbol: str, interval: str, start_time: datetime,
+                            end_time: datetime = datetime.now()) -> pd.DataFrame:
+        # Convert start_time and end_time to Unix timestamps in milliseconds
+        start_time_ms = int(start_time.timestamp() * 1000)
+        end_time_ms = int(end_time.timestamp() * 1000)
 
         endpoint = "/api/v3/klines"
-        
+
         params = {
             'symbol': symbol,
             'interval': interval,
-            'startTime': start_time,
-            'endTime': end_time
+            'startTime': start_time_ms,
+            'endTime': end_time_ms,
+            'limit': self.k_lines_limit
         }
-        
+
         data = self._request('GET', endpoint, params, signed=False)
-        assert len(data) < self.limit_klines_rows, f'get_historical_data() hit request size limit'
         return make_df(data)
-    
+
     def print_top_assets(self):
         account_info = self._get_account_info()
         balances = account_info['balances']
@@ -159,8 +171,9 @@ class BinanceAPIClient:
                     break
 
         return token_value_in_currency
-    
-    def place_vanilla_order(self, order_type, side, token, base_symbol, *, quantity=None, amount_base=None, limit_price=None, stop_loss_price=None):
+
+    def place_vanilla_order(self, order_type, side, token, base_symbol, *, quantity=None, amount_base=None,
+                            limit_price=None, stop_loss_price=None):
         if token == base_symbol:
             raise ValueError("Cannot trade a symbol against itself.")
 
@@ -212,43 +225,51 @@ class BinanceAPIClient:
 
         # Execute the order
         response = self._request("POST", endpoint, params)
-        
+
         if response.get("code"):
             raise Exception(f"Error {response['code']}: {response['msg']}")
-        
-def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price, stop_limit_price, take_profit_price):
-    if side not in ['BUY', 'SELL']:
-        raise ValueError("Invalid order side. Must be 'BUY' or 'SELL'.")
 
-    if token == base_symbol:
-        raise ValueError("Cannot trade a symbol against itself.")
+    def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price, stop_limit_price,
+                        take_profit_price):
+        if side not in ['BUY', 'SELL']:
+            raise ValueError("Invalid order side. Must be 'BUY' or 'SELL'.")
 
-    # Prepare the OCO order parameters
-    endpoint = "/api/v3/order/oco"
-    params = {
-        'symbol': token + base_symbol,
-        'side': side,
-        'quantity': round(quantity, 8),  # Round the quantity to 8 decimal places
-        'stopPrice': f"{stop_loss_price:.8f}",
-        'stopLimitPrice': f"{stop_limit_price:.8f}",
-        'stopLimitTimeInForce': 'GTC',
-        'price': f"{take_profit_price:.8f}",
-    }
+        if token == base_symbol:
+            raise ValueError("Cannot trade a symbol against itself.")
 
-    # Execute the OCO order
-    response = self._request("POST", endpoint, params)
+        # Prepare the OCO order parameters
+        endpoint = "/api/v3/order/oco"
+        params = {
+            'symbol': token + base_symbol,
+            'side': side,
+            'quantity': round(quantity, 8),  # Round the quantity to 8 decimal places
+            'stopPrice': f"{stop_loss_price:.8f}",
+            'stopLimitPrice': f"{stop_limit_price:.8f}",
+            'stopLimitTimeInForce': 'GTC',
+            'price': f"{take_profit_price:.8f}",
+        }
 
-    if response.get("code"):
-        raise Exception(f"Error {response['code']}: {response['msg']}")
+        # Execute the OCO order
+        response = self._request("POST", endpoint, params)
 
-    def get_historical_data_range(self, symbol: str, interval: str, start_time: int, end_time: int, chunk_size: int = 500) -> pd.DataFrame:
+        if response.get("code"):
+            raise Exception(f"Error {response['code']}: {response['msg']}")
+
+    def update_historical_data_csv(self, symbol: str, interval: str, start_time: datetime,
+                                   end_time: datetime = datetime.now(),
+                                   chunk_size: int = 499) -> pd.DataFrame:
         # Your new function that uses your existing function to get historical data beyond Binance API limitations
 
         # Convert the interval string to the number of milliseconds
         ms_interval = interval_to_milliseconds(interval)
 
+        # Convert start_time and end_time to Unix timestamps in milliseconds
+        start_time_ms = int(start_time.timestamp() * 1000)
+        end_time_ms = int(end_time.timestamp() * 1000)
+
         # Calculate the number of chunks needed to cover the specified time range
-        my_chunks = ((end_time - start_time) // (ms_interval * chunk_size)) + 1
+        my_chunks = ((end_time_ms - start_time_ms) // (ms_interval * chunk_size)) + 1
+        logger.info(f'Requesting historical data in {my_chunks} chunks')
 
         # Initialize an empty list to store the results
         results = []
@@ -256,8 +277,11 @@ def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price
         # Loop over each chunk and call the get_historical_data function to retrieve data
         for i in range(my_chunks):
             # Calculate the start and end time for the current chunk
-            chunk_start_time = start_time + i * ms_interval * chunk_size
-            chunk_end_time = min(end_time, chunk_start_time + ms_interval * chunk_size)
+            chunk_start_millis = start_time_ms + i * ms_interval * chunk_size
+            chunk_end_millis = min(end_time_ms, chunk_start_millis + ms_interval * chunk_size)
+
+            chunk_start_time = datetime.utcfromtimestamp(chunk_start_millis / 1000)
+            chunk_end_time = datetime.utcfromtimestamp(chunk_end_millis / 1000)
 
             # Call the get_historical_data function to retrieve data for the current chunk
             chunk_data = self.get_historical_data(symbol, interval, chunk_start_time, chunk_end_time)
@@ -268,7 +292,9 @@ def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price
         # Concatenate all the results into a big dataframe
         df = pd.concat(results)
 
+        csv: str = f'{symbol}_{interval}.csv' # start_time.strftime("%Y-%m-%d")
+        logger.info(csv)
         # Save the dataframe to a CSV file
-        df.to_csv('historical_data.csv', index=False)
+        df.to_csv(csv, index=False)
 
         return df

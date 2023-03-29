@@ -34,8 +34,14 @@ def runstep(name, func):
 ##################################################
 if __name__ == "__main__":
     kp_secrets = runstep("keepass access", extract_kp_secrets)
-
     client = BinanceAPIClient(kp_secrets["BNB_API_KEY"], kp_secrets["BNB_SECRET_KEY"])
+
+    token = "BTC"
+    base_token = "EUR"
+    symbol = token + base_token
+
+    logger.info('fetching historical data ...')
+    df = client.get_historical_data(symbol, short_interval, start_time_ms)
     runstep("binance test", client.print_top_assets)
 
     runstep("testing binance cache", client.print_top_assets)

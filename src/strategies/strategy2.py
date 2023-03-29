@@ -1,8 +1,6 @@
-from threading import Thread
-from datetime import datetime
+import pandas as pd
 from src.strategies import BaseStrategyThread
-from src.utils import plot_close_price_with_signals, add_indicators, nb_days_YTD
-import time
+from src.utils import plot_close_price_with_signals, add_indicators, nb_days_YTD, get_indicators_signals
 import logging
 
 logging.basicConfig(
@@ -10,109 +8,104 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+KNOWN_MODES = ["backtest", "live"]
+
 
 class PlaceOcoWhenItsTime(BaseStrategyThread):
-    def __init__(self, name, exchange_client):
-        super().__init__(name, exchange_client)
+    def __init__(self, name: str, symbol: str, mode="backtest"):
+        super().__init__(name, mode)
+        assert mode in KNOWN_MODES, f'strategy mode must be one of {KNOWN_MODES}'
+        self.symbol = symbol  # 'BTCEUR'
 
-        self.exchange_client = exchange_client
-        self.token = "BTC"
-        self.base_token = "EUR"
-        self.symbol = self.token + self.base_token
+        self.take_profit_threshold = 0.01
+        self.stop_loss_threshold = 1.5 * self.take_profit_threshold
+        self.in_position = False
+        self.last_buy_price = None
 
-
+        ## <multi frame> ##
         self.long_interval = "1d"
-        self.days_of_long_interval = nb_days_YTD() #nb_days_YTD() too long ! 
+        self.live_long_interval_nb_days_lookup = nb_days_YTD()
+
+        self.medium_interval = "1h"
+        self.live_medium_interval_nb_days_lookup = 5
 
         self.short_interval = "15m"
-        self.days_of_short_interval = 4
+        self.live_short_interval_nb_days_lookup = 3
+        ## <multi frame> ##
 
-        self.initial_investment = 1000
+    def get_df(self):
+        if self.mode == "backtest":
+            df_short = add_indicators(pd.read_csv(f'{self.symbol}_{self.short_interval}.csv'))
+            df_medium = add_indicators(pd.read_csv(f'{self.symbol}_{self.medium_interval}.csv'))
+            df_long = add_indicators(pd.read_csv(f'{self.symbol}_{self.long_interval}.csv'))
 
-        self.take_profit_threshold=0.005
-        self.stop_loss_threshold=0.015
+        elif self.mode == "live":
+            raise NotImplemented
+            df_short = None  # TODO
+            df_medium = None  # TODO
+            df_long = None  # TODO
 
-        ## 1. Long-term trend condition
-        ## Récupérer le graph '1D'
-        ## assurer EMA_short > EMA_long sur le 1D
-        self.long_term_uptrend = self.is_long_term_uptrend()
-        logger.info(f"{self.days_of_long_interval} days long_term_uptrend: {self.long_term_uptrend}")
+        assert df_short.shape[1] == df_medium.shape[1] == df_long.shape[1]
 
+        short_df_with_signals = get_indicators_signals(df_short, prefix=self.short_interval)
+        medium_df_with_signals = get_indicators_signals(df_medium, prefix=self.medium_interval)
+        long_df_with_signals = get_indicators_signals(df_long, prefix=self.long_interval)
 
-        
-    def is_long_term_uptrend(self):
-        now = datetime.now()
-        simulated_time = now.replace(hour=12, minute=0, second=0, microsecond=0)
-        current_time_ms = int(simulated_time.timestamp() * 1000)
-        start_time_ms = current_time_ms - (self.days_of_long_interval * 24 * 60 * 60 * 1000)
+        aggregated_df = short_term_df_with_other_time_frames_signals(short_df_with_signals, medium_df_with_signals,
+                                                                     long_df_with_signals)
 
-        df = self.exchange_client.get_historical_data(self.symbol, self.long_interval, start_time_ms)
-        logger.info(f'long term df is {len(df)} rows')
-        df = add_indicators(df)
+        return aggregated_df
 
-        short_ema_col = df.columns.get_loc('Short_EMA')
-        long_ema_col = df.columns.get_loc('Long_EMA')
-
-        # Condition 1: Short EMA is above Long EMA
-        short_above_long = df.iat[len(df) - 1, short_ema_col] > df.iat[len(df) - 1, long_ema_col]
-
-        return short_above_long
-    
-    def apply_strategy_to_df(self, df):
-        
-        df = add_indicators(df)
-        
-        # Initialiser les signaux d'achat et de vente
+    def apply_strategy(self, df: pd.DataFrame):
         df['Buy'] = False
         df['Stop loss'] = False
         df['Take profit'] = False
 
-        in_position = False
-        last_buy_price = None
+        for idx, row in df.iterrows():
+            # Buy
+            if not (self.in_position) and self.buy_condition(df, row):
+                row['Buy'] = True
+                self.in_position = True
+                self.last_buy_price = row['Close']
 
-        for i in range(1, len(df)):
-            if not(in_position) and self.buy_condition(df, i):
-                df.iat[i, df.columns.get_loc('Buy')] = True
+            elif self.in_position:
+                # Stop loss
+                if row['Low'] <= self.last_buy_price * (1 - self.stop_loss_threshold):
+                    row['Stop loss'] = True
+                    self.in_position = False
 
-                in_position = True
-                last_buy_price = df.iat[i, df.columns.get_loc('Close')]
+                # Take profit
+                elif row['High'] >= self.last_buy_price * (1 + self.take_profit_threshold):
+                    row['Take profit'] = True
+                    self.in_position = False
 
-            elif in_position:
-                if df.iat[i, df.columns.get_loc('Low')] <= last_buy_price * (1 - self.stop_loss_threshold):
-                    df.iat[i, df.columns.get_loc('Stop loss')] = True
-                    in_position = False
+            df.loc[idx] = row
 
-                elif df.iat[i, df.columns.get_loc('High')] >= last_buy_price * (1 + self.take_profit_threshold):
-                    df.iat[i, df.columns.get_loc('Take profit')] = True
-                    in_position = False
-        #df.to_csv("toto.csv")
         return df
 
-    def buy_condition(self, df, index):
-        rsi_col = df.columns.get_loc('RSI')
-        short_ema_col = df.columns.get_loc('Short_EMA')
-        long_ema_col = df.columns.get_loc('Long_EMA')
+    def buy_condition(self, row):
+        long_term_cond = row[f'{self.long_interval}_ema_short_above_long']
+        medium_term_cond = True
+        short_term_cond = True
 
-        # Condition 1: Short EMA is above Long EMA
-        short_above_long = df.iat[index, short_ema_col] > df.iat[index, long_ema_col]
+        return long_term_cond & medium_term_cond & short_term_cond
 
-        # Condition 2: RSI is below 30 (oversold condition)
-        rsi_oversold = df.iat[index, rsi_col] < 30
-
-        # Buy if both conditions are met
-        return self.long_term_uptrend and short_above_long #and rsi_oversold
-
-    def run(self):
+    def run_live(self):
+        self.logger.info('starting live trading')
         while not self.exit_flag.is_set():
-            current_time_ms = int(time.time() * 1000)
-            start_time_ms = current_time_ms - (self.days_of_short_interval * 24 * 60 * 60 * 1000)
+            logger.info('getting fresh data ...')
+            # assert data is fresh
 
-            self.logger.info('starting ...')
+            logger.info('computing signals')
 
-            self.logger.info('fetching historical data ...')
-            df = self.exchange_client.get_historical_data(self.symbol, self.short_interval, start_time_ms)
-            logger.info(f'short term df is {len(df)} rows')
             signals = self.apply_strategy_to_df(df)
             self.logger.info('plotting ...')
             plot_close_price_with_signals(df, signals)
             self.stop()
+
+    def run(self):
+
+        if self.mode == "backtest":
+            self.backtest()
+        elif self.mode == "live":
+            self.run_live()
