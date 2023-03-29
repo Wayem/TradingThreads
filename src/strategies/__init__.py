@@ -6,10 +6,11 @@ import logging.config
 class BaseStrategyThread(threading.Thread):
     """Classe de base pour implémenter une stratégie financière comme un thread"""
 
-    def __init__(self, name, exchange_client):
+    def __init__(self, name, exchange_client, mode = "backtest"):
         threading.Thread.__init__(self, name=name)
         self.exchange_client = exchange_client
         self.strategy_name = name
+        self.mode = mode
         self.exit_flag = threading.Event()
 
         # this whole stuff just for logs

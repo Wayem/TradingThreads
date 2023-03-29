@@ -1,5 +1,5 @@
 from typing import Dict
-
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -91,33 +91,57 @@ def interval_to_milliseconds(interval: str) -> int:
 
 
 ## <Signals & indicators> ##
-def add_indicators(df):
-    df['RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
+def add_indicators(df, prefix = ""):
+    # df['RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
 
-    df['Short_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=12)
-    df['Long_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=26)
+    df[f'{prefix}_Short_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=12)
+    df[f'{prefix}_Long_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=26)
 
-    macd, macd_signal, macd_hist = talib.MACD(df['Close'].astype('float64'), fastperiod=12, slowperiod=26,
-                                              signalperiod=9)
-    df['MACD'] = macd
-    df['MACD_Signal'] = macd_signal
-    df['MACD_Hist'] = macd_hist
+    # macd, macd_signal, macd_hist = talib.MACD(df['Close'].astype('float64'), fastperiod=12, slowperiod=26,
+    #                                           signalperiod=9)
+    # df['MACD'] = macd
+    # df['MACD_Signal'] = macd_signal
+    # df['MACD_Hist'] = macd_hist
     return df
 
 
-def get_indicators_signals(row: pd.Series, prefix="") -> Dict[str, bool]:
-    short_above_long = row['Short_EMA'] > row['Long_EMA']
+def get_indicators_signals(row: pd.Series, prefix) -> Dict[str, bool]:
+    short_above_long = row[f'{prefix}_Short_EMA'] > row[f'{prefix}_Long_EMA']
 
     ret = {'ema_short_above_long': short_above_long}
     return {f'{prefix}_{key}': value for key, value in ret.items()}
 
 
-def short_term_df_with_other_time_frames_signals(short_df_with_signals, *other_time_frames_with_signals):
-    raise NotImplemented
-    # TODO
-    # sur les colonnes communes, ne garder que celles de short_df
-    # sur les autres, s'assurer que les noms sont uniques (préfixées ...)
-    # Fill(na) avec la dernière valeur du close
+def add_indicators_signals(df: pd.DataFrame, prefix="") -> pd.DataFrame:
+    signals = df.apply(lambda x: get_indicators_signals(x, prefix), axis=1)
+    signals_df = pd.DataFrame.from_records(signals.values, index=signals.index)
+    result_df = pd.concat([df, signals_df], axis=1)
+    return result_df
 
-    return short_df_with_signals
+def short_term_df_with_other_time_frames_signals(short_df_with_signals, *other_time_frames):
+    """
+    Returns the short term dataframe with signals columns from the higher time frames dataframes.
+    For every Open time (in short term dataframe), the function returns the higher time frame signal value
+    that is stored in the Open time (higher df) the closest in date distance in the past.
+
+    :param short_df_with_signals: pandas DataFrame containing the short term data with 'signal' columns.
+    :param other_time_frames: variable number of pandas DataFrames for the higher time frames.
+    :return: pandas DataFrame containing the short term data with signals from the higher time frames.
+    """
+    # Convert Open time columns to datetime
+    short_df_with_signals['Open time'] = pd.to_datetime(short_df_with_signals['Open time'])
+    for df in other_time_frames:
+        df['Open time'] = pd.to_datetime(df['Open time'])
+
+    # Merge short term and higher time frame dataframes
+    merged_df = short_df_with_signals
+    for df in other_time_frames:
+        specific_columns = [col for col in df.columns if col not in merged_df.columns]
+        merged_df = pd.merge_asof(merged_df.sort_values('Open time'),
+                                  df[['Open time'] + specific_columns].sort_values('Open time'),
+                                  on='Open time',
+                                  direction='backward')
+
+    return merged_df
+
 ## </Signals & indicators> ##

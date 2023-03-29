@@ -38,16 +38,11 @@ if __name__ == "__main__":
 
     token = "BTC"
     base_token = "EUR"
-    symbol = token + base_token
+    BTCEUR = token + base_token
 
-    logger.info('fetching historical data ...')
-    df = client.get_historical_data(symbol, short_interval, start_time_ms)
     runstep("binance test", client.print_top_assets)
-
     runstep("testing binance cache", client.print_top_assets)
 
-    s2 = PlaceOcoWhenItsTime("s2", client)
-
+    s2 = PlaceOcoWhenItsTime("s2", client, BTCEUR)
     runstep("s2", s2.run)
-
     logger.info("Done.")
