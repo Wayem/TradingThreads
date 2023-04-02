@@ -92,28 +92,29 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
         return long_term_cond & medium_term_cond & short_term_cond
 
-    def backtest(self):
+    def backtest(self) -> pd.DataFrame: # df_with_buy_sl_tp_columns
         self.logger.info(f"backtesting {self.name} on local data")
         short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
-        short_df_with_higher_tf_signals.to_csv('short_df_with_higher_tf_signals.csv')
         df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+        return df_with_buy_sl_tp_columns
+        # df_with_buy_sl_tp_columns.to_csv('df_with_buy_sl_tp_columns.csv')
 
-        plot_close_price_with_signals(df_with_buy_sl_tp_columns, df_with_buy_sl_tp_columns)
-        self.stop()
+        # plot_close_price_with_signals(df_with_buy_sl_tp_columns)
+        # self.stop()
 
     def run_live(self):
         self.logger.info('starting live trading')
-        while not self.exit_flag.is_set():
-            self.logger.info('getting fresh data, aggregate time frames & compute indicators columns')
-            df_aggregated = self.get_short_df_with_higher_tf_signals()
-
-            signals = self.apply_strategy_to_df(df)
-            self.logger.info('plotting ...')
-            plot_close_price_with_signals(df, signals)
-            self.stop()
+        # while not self.exit_flag.is_set():
+        #     self.logger.info('getting fresh data, aggregate time frames & compute indicators columns')
+        #     df_aggregated = self.get_short_df_with_higher_tf_signals()
+        #
+        #     signals = self.apply_strategy_to_df(df)
+        #     self.logger.info('plotting ...')
+        #     plot_close_price_with_signals(df, signals)
+        #     self.stop()
 
     def run(self):
         if self.mode == "backtest":
-            self.backtest()
+            return self.backtest()
         elif self.mode == "live":
             self.run_live()

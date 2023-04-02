@@ -36,13 +36,9 @@ if __name__ == "__main__":
     kp_secrets = runstep("keepass access", extract_kp_secrets)
     client = BinanceAPIClient(kp_secrets["BNB_API_KEY"], kp_secrets["BNB_SECRET_KEY"])
 
-    token = "BTC"
-    base_token = "EUR"
-    BTCEUR = token + base_token
-
     runstep("binance test", client.print_top_assets)
     runstep("testing binance cache", client.print_top_assets)
 
-    s2 = PlaceOcoWhenItsTime("s2", client, BTCEUR)
-    runstep("s2", s2.run)
+    # s2 = PlaceOcoWhenItsTime("s2", client, "BTCEUR")
+    # runstep("s2", s2.run)
     logger.info("Done.")

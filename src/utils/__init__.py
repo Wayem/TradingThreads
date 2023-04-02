@@ -44,24 +44,24 @@ def make_df(raw_historical_data):
     return df
 
 
-def plot_close_price_with_signals(historical_df, signals_df):
+def plot_close_price_with_signals(df_with_buy_sl_tp_columns):
     fig, ax = plt.subplots(figsize=(14, 8))
 
     # Plot Close prices
-    ax.plot(historical_df.index, historical_df['Close'], label='Close Price')
+    ax.plot(df_with_buy_sl_tp_columns.index, df_with_buy_sl_tp_columns['Close'], label='Close Price')
     ax.set_ylabel('Price')
     ax.legend(loc='best')
 
     # Plot Buy signals
-    ax.scatter(signals_df[signals_df['Buy']].index, historical_df.loc[signals_df['Buy']].Close, label='Buy', marker='^',
+    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Buy']].index, df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Buy']].Close, label='Buy', marker='^',
                color='black')
 
     # Plot SL signals
-    ax.scatter(signals_df[signals_df['Stop loss']].index, historical_df.loc[signals_df['Stop loss']].Close,
+    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Stop loss']].index, df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Stop loss']].Close,
                label='Stop loss', marker='v', color='r')
 
     # Plot TP signals
-    ax.scatter(signals_df[signals_df['Take profit']].index, historical_df.loc[signals_df['Take profit']].Close,
+    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Take profit']].index, df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Take profit']].Close,
                label='Take profit', marker='v', color='g')
 
     # Format x-axis
