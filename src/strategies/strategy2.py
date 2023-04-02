@@ -5,7 +5,7 @@ import pandas as pd
 from src.api import BinanceAPIClient
 from src.strategies import BaseStrategyThread
 from src.utils import plot_close_price_with_signals, add_indicators, nb_days_YTD, add_indicators_signals, \
-    short_term_df_with_other_time_frames_signals
+    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX
 
 KNOWN_MODES = ["backtest", "live"]
 
@@ -54,6 +54,8 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         aggregated_df = short_term_df_with_other_time_frames_signals(short_df_with_signals, medium_df_with_signals,
                                                                      long_df_with_signals)
 
+        signals_columns = [col for col in aggregated_df.columns if SIGNAL_PREFIX in col]
+        aggregated_df.loc[:, signals_columns] = aggregated_df.loc[:, signals_columns].fillna(False)
         return aggregated_df
 
     def apply_strategy(self, df_with_indicators: pd.DataFrame):
@@ -84,7 +86,7 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         return df_with_indicators
 
     def buy_condition(self, row):
-        long_term_cond = row[f'{self.long_interval}_ema_short_above_long']
+        long_term_cond = row[f'{self.long_interval}_ema_short_above_long_{SIGNAL_PREFIX}']
         medium_term_cond = True
         short_term_cond = True
 
@@ -93,6 +95,7 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
     def backtest(self):
         self.logger.info(f"backtesting {self.name} on local data")
         short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
+        short_df_with_higher_tf_signals.to_csv('short_df_with_higher_tf_signals.csv')
         df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
 
         plot_close_price_with_signals(df_with_buy_sl_tp_columns, df_with_buy_sl_tp_columns)

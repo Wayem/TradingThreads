@@ -6,6 +6,8 @@ import matplotlib.dates as mdates
 from datetime import datetime
 import talib
 
+SIGNAL_PREFIX = "SIGNAL"
+
 
 def nb_days_YTD():
     # Get the current date
@@ -32,7 +34,7 @@ def make_df(raw_historical_data):
     df['Close time'] = pd.to_datetime(df['Close time'], unit='ms')
 
     # Set the index to the 'Close time' column
-    df.set_index('Close time', inplace=True)
+    df.set_index('Close time', inplace=True, drop=False)
 
     # Convert the 'Close' price column to a numeric type
     df['Open'] = pd.to_numeric(df['Open'])
@@ -91,7 +93,7 @@ def interval_to_milliseconds(interval: str) -> int:
 
 
 ## <Signals & indicators> ##
-def add_indicators(df, prefix = ""):
+def add_indicators(df, prefix=""):
     # df['RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
 
     df[f'{prefix}_Short_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=12)
@@ -109,7 +111,7 @@ def get_indicators_signals(row: pd.Series, prefix) -> Dict[str, bool]:
     short_above_long = row[f'{prefix}_Short_EMA'] > row[f'{prefix}_Long_EMA']
 
     ret = {'ema_short_above_long': short_above_long}
-    return {f'{prefix}_{key}': value for key, value in ret.items()}
+    return {f'{prefix}_{key}_{SIGNAL_PREFIX}': value for key, value in ret.items()}
 
 
 def add_indicators_signals(df: pd.DataFrame, prefix="") -> pd.DataFrame:
@@ -118,28 +120,29 @@ def add_indicators_signals(df: pd.DataFrame, prefix="") -> pd.DataFrame:
     result_df = pd.concat([df, signals_df], axis=1)
     return result_df
 
+
 def short_term_df_with_other_time_frames_signals(short_df_with_signals, *other_time_frames):
     """
     Returns the short term dataframe with signals columns from the higher time frames dataframes.
-    For every Open time (in short term dataframe), the function returns the higher time frame signal value
-    that is stored in the Open time (higher df) the closest in date distance in the past.
+    For every Close time (in short term dataframe), the function returns the higher time frame signal value
+    that is stored in the Close time (higher df) the closest in date distance in the past.
 
     :param short_df_with_signals: pandas DataFrame containing the short term data with 'signal' columns.
     :param other_time_frames: variable number of pandas DataFrames for the higher time frames.
     :return: pandas DataFrame containing the short term data with signals from the higher time frames.
     """
-    # Convert Open time columns to datetime
-    short_df_with_signals['Open time'] = pd.to_datetime(short_df_with_signals['Open time'])
+    # Convert Close time columns to datetime
+    short_df_with_signals['Close time'] = pd.to_datetime(short_df_with_signals['Close time'])
     for df in other_time_frames:
-        df['Open time'] = pd.to_datetime(df['Open time'])
+        df['Close time'] = pd.to_datetime(df['Close time'])
 
     # Merge short term and higher time frame dataframes
     merged_df = short_df_with_signals
     for df in other_time_frames:
         specific_columns = [col for col in df.columns if col not in merged_df.columns]
-        merged_df = pd.merge_asof(merged_df.sort_values('Open time'),
-                                  df[['Open time'] + specific_columns].sort_values('Open time'),
-                                  on='Open time',
+        merged_df = pd.merge_asof(merged_df.sort_values('Close time'),
+                                  df[['Close time'] + specific_columns].sort_values('Close time'),
+                                  on='Close time',
                                   direction='backward')
 
     return merged_df
