@@ -17,7 +17,7 @@ class BaseStrategyThread(threading.Thread):
         # this whole stuff just for logs
         self.logger = logging.getLogger(self.strategy_name)
         file_handler = logging.FileHandler(f'logs/{self.strategy_name}.log')
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.ERROR)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)

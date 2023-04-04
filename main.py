@@ -3,7 +3,7 @@ import yaml
 import logging
 
 from src.utils.kp_secrets import extract_kp_secrets
-from src.strategies.strategy2 import PlaceOcoWhenItsTime
+from src.strategies.PlaceOcoWhenItsTime import PlaceOcoWhenItsTime
 from src.api import BinanceAPIClient
 
 logging.basicConfig(

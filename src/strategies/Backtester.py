@@ -1,6 +1,6 @@
 from typing import Dict, List
 from src.strategies import BaseStrategyThread
-from src.strategies.strategy2 import PlaceOcoWhenItsTime
+from src.strategies.PlaceOcoWhenItsTime import PlaceOcoWhenItsTime
 import matplotlib.pyplot as plt
 
 
@@ -85,7 +85,9 @@ if __name__ == "__main__":
     eur = "EUR"
     BTCEUR = btc + eur
 
-    s2 = PlaceOcoWhenItsTime("s2", None, BTCEUR)
+    client = None
+
+    s2 = PlaceOcoWhenItsTime(name="s2", exchange_client= client, symbol=BTCEUR)
 
     backtester = Backtester([s2])
 

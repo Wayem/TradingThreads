@@ -11,33 +11,56 @@ KNOWN_MODES = ["backtest", "live"]
 
 
 class PlaceOcoWhenItsTime(BaseStrategyThread):
-    def __init__(self, name: str, exchange_client: BinanceAPIClient, symbol: str, mode="backtest"):
+    def __init__(self, name: str,
+                 exchange_client: BinanceAPIClient,
+                 symbol: str,
+                 long_interval="1d",
+                 medium_interval="1h",
+                 short_interval="15m",
+                 tp_threshold=0.01,
+                 sl_ratio_to_tp_threshold=1.5,
+                 mode="backtest",
+                 rsi_oversold=30,
+                 consecutive_hist_before_momentum=3):
         super().__init__(name=name, exchange_client=exchange_client, mode=mode)
         assert mode in KNOWN_MODES, f'strategy mode must be one of {KNOWN_MODES}'
         self.symbol = symbol  # 'BTCEUR'
 
-        self.take_profit_threshold = 0.01
-        self.stop_loss_threshold = 3 * self.take_profit_threshold
+        self.take_profit_threshold = tp_threshold
+        self.stop_loss_threshold = sl_ratio_to_tp_threshold * self.take_profit_threshold
         self.in_position = False
         self.last_buy_price = None
 
         ## <multi frame> ##
-        self.long_interval = "1d"
+        self.long_interval = long_interval
         self.live_long_interval_nb_days_lookup = nb_days_YTD()
 
-        self.medium_interval = "1h"
+        self.medium_interval = medium_interval
         self.live_medium_interval_nb_days_lookup = 5
 
-        self.short_interval = "15m"
+        self.short_interval = short_interval
         self.live_short_interval_nb_days_lookup = 3
         ## <multi frame> ##
+
+        ## Tuning Params
+        self.rsi_oversold = rsi_oversold
+        self.consecutive_hist_before_momentum = consecutive_hist_before_momentum
+        ##
 
     def get_short_df_with_higher_tf_signals(self):
         if self.mode == "backtest":
             self.logger.info("using cached csv")
-            df_short = add_indicators(pd.read_csv(f'{self.symbol}_{self.short_interval}.csv'), self.short_interval)
-            df_medium = add_indicators(pd.read_csv(f'{self.symbol}_{self.medium_interval}.csv'), self.medium_interval)
-            df_long = add_indicators(pd.read_csv(f'{self.symbol}_{self.long_interval}.csv'), self.long_interval)
+            df_short = add_indicators(pd.read_csv(f'{self.symbol}_{self.short_interval}.csv'),
+                                      prefix=self.short_interval,
+                                      consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+
+            df_medium = add_indicators(pd.read_csv(f'{self.symbol}_{self.medium_interval}.csv'),
+                                       prefix=self.medium_interval,
+                                       consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+
+            df_long = add_indicators(pd.read_csv(f'{self.symbol}_{self.long_interval}.csv'),
+                                     prefix=self.long_interval,
+                                     consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
 
         elif self.mode == "live":
             raise NotImplemented
@@ -47,11 +70,20 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
         assert df_short.shape[1] == df_medium.shape[1] == df_long.shape[1]
 
-        short_df_with_signals = add_indicators_signals(df_short, prefix=self.short_interval)
-        medium_df_with_signals = add_indicators_signals(df_medium, prefix=self.medium_interval)
-        long_df_with_signals = add_indicators_signals(df_long, prefix=self.long_interval)
+        short_df_with_signals = add_indicators_signals(df_short,
+                                                       prefix=self.short_interval,
+                                                       rsi_oversold=self.rsi_oversold)
 
-        aggregated_df = short_term_df_with_other_time_frames_signals(short_df_with_signals, medium_df_with_signals,
+        medium_df_with_signals = add_indicators_signals(df_medium,
+                                                        prefix=self.medium_interval,
+                                                        rsi_oversold=self.rsi_oversold)
+
+        long_df_with_signals = add_indicators_signals(df_long,
+                                                      prefix=self.long_interval,
+                                                      rsi_oversold=self.rsi_oversold)
+
+        aggregated_df = short_term_df_with_other_time_frames_signals(short_df_with_signals,
+                                                                     medium_df_with_signals,
                                                                      long_df_with_signals)
 
         signals_columns = [col for col in aggregated_df.columns if SIGNAL_PREFIX in col]
@@ -92,7 +124,7 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
         return long_term_cond & medium_term_cond & short_term_cond
 
-    def backtest(self) -> pd.DataFrame: # df_with_buy_sl_tp_columns
+    def backtest(self) -> pd.DataFrame:  # df_with_buy_sl_tp_columns
         self.logger.info(f"backtesting {self.name} on local data")
         short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
         df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)

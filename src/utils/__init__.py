@@ -122,7 +122,7 @@ def _add_macd_momentum(df, prefix, consecutive_rows):
     df[f'{prefix}_MACD_DOWN_Momentum'] = macd_down
 
     return df
-def add_indicators(df, prefix=""):
+def add_indicators(df, prefix, consecutive_hist_before_momentum):
     df[f'{prefix}_RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
 
     df[f'{prefix}_Short_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=12)
@@ -131,13 +131,13 @@ def add_indicators(df, prefix=""):
     macd, macd_signal, macd_hist = talib.MACD(df['Close'].astype('float64'), fastperiod=12, slowperiod=26,
                                               signalperiod=9)
     df[f'{prefix}_MACD_Hist'] = macd_hist
-    df = _add_macd_momentum(df, prefix, 3)
+    df = _add_macd_momentum(df, prefix, consecutive_hist_before_momentum)
     return df
 
 
-def get_indicators_signals(row: pd.Series, prefix) -> Dict[str, bool]:
+def get_indicators_signals(row: pd.Series, prefix, rsi_oversold) -> Dict[str, bool]:
     short_above_long = row[f'{prefix}_Short_EMA'] > row[f'{prefix}_Long_EMA']
-    oversold = row[f'{prefix}_RSI'] < 30
+    oversold = row[f'{prefix}_RSI'] < rsi_oversold
     overbought = row[f'{prefix}_RSI'] > 70
     momentum_up = row[f'{prefix}_MACD_UP_Momentum']
     momentum_down = row[f'{prefix}_MACD_DOWN_Momentum']
@@ -150,8 +150,12 @@ def get_indicators_signals(row: pd.Series, prefix) -> Dict[str, bool]:
     return {f'{prefix}_{key}_{SIGNAL_PREFIX}': value for key, value in ret.items()}
 
 
-def add_indicators_signals(df: pd.DataFrame, prefix="") -> pd.DataFrame:
-    signals = df.apply(lambda x: get_indicators_signals(x, prefix), axis=1)
+def add_indicators_signals(df: pd.DataFrame, prefix, rsi_oversold) -> pd.DataFrame:
+    signals = df.apply(lambda x: get_indicators_signals(x,
+                                                        prefix = prefix,
+                                                        rsi_oversold = rsi_oversold),
+                       axis=1)
+
     signals_df = pd.DataFrame.from_records(signals.values, index=signals.index)
     result_df = pd.concat([df, signals_df], axis=1)
     return result_df
