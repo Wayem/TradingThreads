@@ -17,7 +17,7 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         self.symbol = symbol  # 'BTCEUR'
 
         self.take_profit_threshold = 0.01
-        self.stop_loss_threshold = 1.5 * self.take_profit_threshold
+        self.stop_loss_threshold = 3 * self.take_profit_threshold
         self.in_position = False
         self.last_buy_price = None
 
@@ -87,8 +87,8 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
     def buy_condition(self, row):
         long_term_cond = row[f'{self.long_interval}_ema_short_above_long_{SIGNAL_PREFIX}']
-        medium_term_cond = True
-        short_term_cond = True
+        medium_term_cond = row[f'{self.medium_interval}_momentum_up_{SIGNAL_PREFIX}']
+        short_term_cond = row[f'{self.short_interval}_oversold_{SIGNAL_PREFIX}']
 
         return long_term_cond & medium_term_cond & short_term_cond
 

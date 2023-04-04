@@ -93,24 +93,60 @@ def interval_to_milliseconds(interval: str) -> int:
 
 
 ## <Signals & indicators> ##
+def _add_macd_momentum(df, prefix, consecutive_rows):
+    # Define the conditions for 'MACD_UP_Momentum' and 'MACD_DOWN_Momentum'
+    macd_hist_prev = df[f'{prefix}_MACD_Hist'].shift(1)
+    macd_up_count = 0
+    macd_down_count = 0
+    macd_up = np.zeros(len(df), dtype=bool)
+    macd_down = np.zeros(len(df), dtype=bool)
+
+    for i in range(1, len(df)):
+        if df[f'{prefix}_MACD_Hist'].iloc[i] > macd_hist_prev.iloc[i]:
+            macd_up_count += 1
+            macd_down_count = 0
+        elif df[f'{prefix}_MACD_Hist'].iloc[i] < macd_hist_prev.iloc[i]:
+            macd_down_count += 1
+            macd_up_count = 0
+        else:
+            macd_up_count = 0
+            macd_down_count = 0
+
+        if macd_up_count >= consecutive_rows:
+            macd_up[i] = True
+        if macd_down_count >= consecutive_rows:
+            macd_down[i] = True
+
+    # Add the columns to the dataframe
+    df[f'{prefix}_MACD_UP_Momentum'] = macd_up
+    df[f'{prefix}_MACD_DOWN_Momentum'] = macd_down
+
+    return df
 def add_indicators(df, prefix=""):
-    # df['RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
+    df[f'{prefix}_RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
 
     df[f'{prefix}_Short_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=12)
     df[f'{prefix}_Long_EMA'] = talib.EMA(df['Close'].astype('float64'), timeperiod=26)
 
-    # macd, macd_signal, macd_hist = talib.MACD(df['Close'].astype('float64'), fastperiod=12, slowperiod=26,
-    #                                           signalperiod=9)
-    # df['MACD'] = macd
-    # df['MACD_Signal'] = macd_signal
-    # df['MACD_Hist'] = macd_hist
+    macd, macd_signal, macd_hist = talib.MACD(df['Close'].astype('float64'), fastperiod=12, slowperiod=26,
+                                              signalperiod=9)
+    df[f'{prefix}_MACD_Hist'] = macd_hist
+    df = _add_macd_momentum(df, prefix, 3)
     return df
 
 
 def get_indicators_signals(row: pd.Series, prefix) -> Dict[str, bool]:
     short_above_long = row[f'{prefix}_Short_EMA'] > row[f'{prefix}_Long_EMA']
+    oversold = row[f'{prefix}_RSI'] < 30
+    overbought = row[f'{prefix}_RSI'] > 70
+    momentum_up = row[f'{prefix}_MACD_UP_Momentum']
+    momentum_down = row[f'{prefix}_MACD_DOWN_Momentum']
 
-    ret = {'ema_short_above_long': short_above_long}
+    ret = {'ema_short_above_long': short_above_long,
+           'oversold': oversold,
+           'overbought': overbought,
+           'momentum_up': momentum_up,
+           'momentum_down': momentum_down}
     return {f'{prefix}_{key}_{SIGNAL_PREFIX}': value for key, value in ret.items()}
 
 

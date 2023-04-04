@@ -1,6 +1,7 @@
 from typing import Dict, List
 from src.strategies import BaseStrategyThread
 from src.strategies.strategy2 import PlaceOcoWhenItsTime
+import matplotlib.pyplot as plt
 
 
 class Backtester():
@@ -59,6 +60,15 @@ class Backtester():
         df['Performance'] = [p / initial_investment for p in performances_list]
         return df  # With perf col added
 
+    def plot_performance(self, strategy_name):
+        df = self.dct_of_df_with_buy_sl_tp_columns[strategy_name]
+        plt.figure(figsize=(12, 6))
+        plt.plot(df['Close time'], df['Performance'])
+        plt.xlabel('Time')
+        plt.ylabel('Portfolio Value (€)')
+        plt.title('Portfolio Performance Over Time')
+        plt.show()
+
     def latest_perf_values(self):
         ret = {strategy_name: None for strategy_name in self.dct_of_df_with_buy_sl_tp_columns.keys()}
 
@@ -81,3 +91,5 @@ if __name__ == "__main__":
 
     latest_perf_values = backtester.run()  # {"s2": "0.78", "s1": "1.12"}
     print(f'last_perfs_values : {latest_perf_values}')
+
+    backtester.plot_performance('s2')
