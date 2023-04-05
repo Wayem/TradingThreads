@@ -5,18 +5,18 @@ from src.strategies.Backtester import Backtester
 from src.strategies.PlaceOcoWhenItsTime import PlaceOcoWhenItsTime
 
 
-def gridsearch(exchange_client, symbol, long_intervals, medium_intervals, short_intervals, tp_thresholds, sl_ratio_to_tp_threshold, rsi_oversolds, consecutive_hists):
+def gridsearch(exchange_client, symbol, long_intervals, medium_intervals, short_intervals, tp_thresholds, sl_ratio_to_tp_thresholds, rsi_oversolds, consecutive_hists):
     results = []
 
     total_iterations = (len(long_intervals) * len(medium_intervals) * len(short_intervals) *
-                        len(tp_thresholds) * len(sl_ratio_to_tp_threshold) * len(rsi_oversolds) * len(consecutive_hists))
+                        len(tp_thresholds) * len(sl_ratio_to_tp_thresholds) * len(rsi_oversolds) * len(consecutive_hists))
 
     with tqdm(total=total_iterations, desc="Grid Search Progress") as pbar:
         for long_interval in long_intervals:
             for medium_interval in medium_intervals:
                 for short_interval in short_intervals:
                     for tp_threshold in tp_thresholds:
-                        for sl_ratio_to_tp_threshold in sl_ratio_to_tp_threshold:
+                        for sl_ratio_to_tp_threshold in sl_ratio_to_tp_thresholds:
                             for rsi_oversold in rsi_oversolds:
                                 for consecutive_hist in consecutive_hists:
                                     strategy = PlaceOcoWhenItsTime(
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         medium_intervals=["1h", "4h"],
         short_intervals=["15m", "30m", "5m"],
         tp_thresholds=[0.05, 0.01, 0.02, 0.03, 0.1],
-        sl_ratio_to_tp_threshold=[1.5, 2, 3, 5],
+        sl_ratio_to_tp_thresholds=[1.5, 2, 3, 5],
         rsi_oversolds=[30, 40, 50],
         consecutive_hists=[2, 3, 4, 5, 8],
     )
