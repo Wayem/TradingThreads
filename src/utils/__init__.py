@@ -1,12 +1,26 @@
 from typing import Dict
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 import talib
+import pandas as pd
 
 SIGNAL_PREFIX = "SIGNAL"
+
+
+def timer(fn):
+    from time import perf_counter
+
+    def inner(*args, **kwargs):
+        start_time = perf_counter()
+        to_execute = fn(*args, **kwargs)
+        end_time = perf_counter()
+        execution_time = end_time - start_time
+        print('{0} took {1:.8f}s to execute'.format(fn.__name__, execution_time))
+        return to_execute
+
+    return inner
 
 
 def nb_days_YTD():
@@ -41,6 +55,7 @@ def make_df(raw_historical_data):
     df['High'] = pd.to_numeric(df['High'])
     df['Low'] = pd.to_numeric(df['Low'])
     df['Close'] = pd.to_numeric(df['Close'])
+
     return df
 
 
@@ -53,15 +68,18 @@ def plot_close_price_with_signals(df_with_buy_sl_tp_columns):
     ax.legend(loc='best')
 
     # Plot Buy signals
-    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Buy']].index, df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Buy']].Close, label='Buy', marker='^',
+    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Buy']].index,
+               df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Buy']].Close, label='Buy', marker='^',
                color='black')
 
     # Plot SL signals
-    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Stop loss']].index, df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Stop loss']].Close,
+    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Stop loss']].index,
+               df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Stop loss']].Close,
                label='Stop loss', marker='v', color='r')
 
     # Plot TP signals
-    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Take profit']].index, df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Take profit']].Close,
+    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Take profit']].index,
+               df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Take profit']].Close,
                label='Take profit', marker='v', color='g')
 
     # Format x-axis
@@ -122,6 +140,8 @@ def _add_macd_momentum(df, prefix, consecutive_rows):
     df[f'{prefix}_MACD_DOWN_Momentum'] = macd_down
 
     return df
+
+
 def add_indicators(df, prefix, consecutive_hist_before_momentum):
     df[f'{prefix}_RSI'] = talib.RSI(df['Close'].astype('float64'), timeperiod=14)
 
@@ -152,8 +172,8 @@ def get_indicators_signals(row: pd.Series, prefix, rsi_oversold) -> Dict[str, bo
 
 def add_indicators_signals(df: pd.DataFrame, prefix, rsi_oversold) -> pd.DataFrame:
     signals = df.apply(lambda x: get_indicators_signals(x,
-                                                        prefix = prefix,
-                                                        rsi_oversold = rsi_oversold),
+                                                        prefix=prefix,
+                                                        rsi_oversold=rsi_oversold),
                        axis=1)
 
     signals_df = pd.DataFrame.from_records(signals.values, index=signals.index)

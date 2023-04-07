@@ -3,10 +3,10 @@ from datetime import datetime
 import requests
 import hmac
 import hashlib
-import time
 from urllib.parse import urlencode
 import pandas as pd
 import logging
+
 from src.utils import make_df, interval_to_milliseconds
 import time
 import cachetools
@@ -75,22 +75,20 @@ class BinanceAPIClient:
 
         return response.json()
 
-    @cache_results
     def _get_account_info(self):
         endpoint = "/api/v3/account"
         return self._request("GET", endpoint)
 
-    @cache_results
     def _get_all_tickers(self):
         url = f"{self.base_url}/api/v3/ticker/price"
         return requests.get(url).json()
 
-    @cache_results
     def get_historical_data(self, symbol: str, interval: str, start_time: datetime,
                             end_time: datetime = datetime.now()) -> pd.DataFrame:
         # Convert start_time and end_time to Unix timestamps in milliseconds
         start_time_ms = int(start_time.timestamp() * 1000)
-        end_time_ms = int(end_time.timestamp() * 1000)
+        end_time_ms = int(end_time.timestamp() * 1000) if end_time else None
+        limit = self.k_lines_limit if end_time_ms else 1000
 
         endpoint = "/api/v3/klines"
 
@@ -99,7 +97,7 @@ class BinanceAPIClient:
             'interval': interval,
             'startTime': start_time_ms,
             'endTime': end_time_ms,
-            'limit': self.k_lines_limit
+            'limit': limit
         }
 
         data = self._request('GET', endpoint, params, signed=False)
@@ -275,22 +273,30 @@ class BinanceAPIClient:
         results = []
 
         # Loop over each chunk and call the get_historical_data function to retrieve data
+        last_loop = False
         for i in range(my_chunks):
+            if (i == my_chunks - 1):
+                last_loop = True
             # Calculate the start and end time for the current chunk
             chunk_start_millis = start_time_ms + i * ms_interval * chunk_size
             chunk_end_millis = min(end_time_ms, chunk_start_millis + ms_interval * chunk_size)
 
             chunk_start_time = datetime.utcfromtimestamp(chunk_start_millis / 1000)
-            chunk_end_time = datetime.utcfromtimestamp(chunk_end_millis / 1000)
+            chunk_end_time = datetime.utcfromtimestamp(chunk_end_millis / 1000) if not(last_loop) else None
 
             # Call the get_historical_data function to retrieve data for the current chunk
             chunk_data = self.get_historical_data(symbol, interval, chunk_start_time, chunk_end_time)
+
+            LOCAL_TZ = 'Europe/Paris'
+            chunk_data[f'Open time {LOCAL_TZ}'] = chunk_data['Open time'].dt.tz_localize('UTC').dt.tz_convert(LOCAL_TZ)
+            chunk_data[f'Close time {LOCAL_TZ}'] = chunk_data['Close time'].dt.tz_localize('UTC').dt.tz_convert(LOCAL_TZ)
 
             # Append the chunk data to the results list
             results.append(chunk_data)
 
         # Concatenate all the results into a big dataframe
         df = pd.concat(results)
+        df.drop_duplicates(subset=['Open time'])
 
         csv: str = f'{symbol}_{interval}.csv' # start_time.strftime("%Y-%m-%d")
         logger.info(csv)

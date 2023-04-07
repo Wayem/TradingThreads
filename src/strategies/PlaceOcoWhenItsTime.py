@@ -1,10 +1,10 @@
-import sys
+from datetime import datetime, timedelta
 
 import pandas as pd
 
 from src.api import BinanceAPIClient
 from src.strategies import BaseStrategyThread
-from src.utils import plot_close_price_with_signals, add_indicators, nb_days_YTD, add_indicators_signals, \
+from src.utils import add_indicators, add_indicators_signals, \
     short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX
 
 KNOWN_MODES = ["backtest", "live"]
@@ -33,13 +33,13 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
         ## <multi frame> ##
         self.long_interval = long_interval
-        self.live_long_interval_nb_days_lookup = nb_days_YTD()
+        self.live_long_interval_nb_days_lookup = 1
 
         self.medium_interval = medium_interval
-        self.live_medium_interval_nb_days_lookup = 5
+        self.live_medium_interval_nb_days_lookup = 1
 
         self.short_interval = short_interval
-        self.live_short_interval_nb_days_lookup = 3
+        self.live_short_interval_nb_days_lookup = 1
         ## <multi frame> ##
 
         ## Tuning Params
@@ -47,29 +47,51 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         self.consecutive_hist_before_momentum = consecutive_hist_before_momentum
         ##
 
-    def get_short_df_with_higher_tf_signals(self):
-        if self.mode == "backtest":
-            self.logger.info("using cached csv")
-            df_short = add_indicators(pd.read_csv(f'{self.symbol}_{self.short_interval}.csv'),
-                                      prefix=self.short_interval,
-                                      consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
 
-            df_medium = add_indicators(pd.read_csv(f'{self.symbol}_{self.medium_interval}.csv'),
-                                       prefix=self.medium_interval,
-                                       consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+    def update_historical_data_csv(self):
+        if self.mode == "live":
+            start_long = datetime.now() - timedelta(days=self.live_long_interval_nb_days_lookup)
+            start_medium = datetime.now() - timedelta(days=self.live_medium_interval_nb_days_lookup)
+            start_short = datetime.now() - timedelta(days=self.live_short_interval_nb_days_lookup)
+            self.exchange_client.update_historical_data_csv(self.symbol, self.long_interval,
+                                                            start_long)
+            self.exchange_client.update_historical_data_csv(self.symbol, self.medium_interval,
+                                                            start_medium)
+            self.exchange_client.update_historical_data_csv(self.symbol, self.short_interval,
+                                                            start_short)
 
-            df_long = add_indicators(pd.read_csv(f'{self.symbol}_{self.long_interval}.csv'),
-                                     prefix=self.long_interval,
-                                     consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+    def read_raw_data_frames(self):
+        df_short_raw = pd.read_csv(f'{self.symbol}_{self.short_interval}.csv')
+        df_medium_raw = pd.read_csv(f'{self.symbol}_{self.medium_interval}.csv')
+        df_long_raw = pd.read_csv(f'{self.symbol}_{self.long_interval}.csv')
 
-        elif self.mode == "live":
-            raise NotImplemented
-            df_short = None  # TODO
-            df_medium = None  # TODO
-            df_long = None  # TODO
+        # df_short_raw['Open time'] = pd.to_datetime(df_short_raw['Open time'].tz_localize(LOCAL_TZ))
+        # df_short_raw['Close time'] = pd.to_datetime(df_short_raw['Close time'].tz_localize(LOCAL_TZ))
+        #
+        # df_medium_raw['Open time'] = pd.to_datetime(df_medium_raw['Open time'].tz_localize(LOCAL_TZ))
+        # df_medium_raw['Close time'] = pd.to_datetime(df_medium_raw['Close time'].tz_localize(LOCAL_TZ))
+        #
+        # df_long_raw['Open time'] = pd.to_datetime(df_long_raw['Open time'].tz_localize(LOCAL_TZ))
+        # df_long_raw['Close time'] = pd.to_datetime(df_long_raw['Close time'].tz_localize(LOCAL_TZ))
 
-        assert df_short.shape[1] == df_medium.shape[1] == df_long.shape[1]
+        return df_short_raw, df_medium_raw, df_long_raw
 
+    def add_indicators_to_data_frames(self, df_short_raw, df_medium_raw, df_long_raw):
+        df_short = add_indicators(df_short_raw,
+                                  prefix=self.short_interval,
+                                  consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+
+        df_medium = add_indicators(df_medium_raw,
+                                   prefix=self.medium_interval,
+                                   consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+
+        df_long = add_indicators(df_long_raw,
+                                 prefix=self.long_interval,
+                                 consecutive_hist_before_momentum=self.consecutive_hist_before_momentum)
+
+        return df_short, df_medium, df_long
+
+    def add_signals_to_data_frames(self, df_short, df_medium, df_long):
         short_df_with_signals = add_indicators_signals(df_short,
                                                        prefix=self.short_interval,
                                                        rsi_oversold=self.rsi_oversold)
@@ -81,6 +103,25 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         long_df_with_signals = add_indicators_signals(df_long,
                                                       prefix=self.long_interval,
                                                       rsi_oversold=self.rsi_oversold)
+
+        return short_df_with_signals, medium_df_with_signals, long_df_with_signals
+
+    def get_short_df_with_higher_tf_signals(self):
+        assert self.mode in ['backtest', 'live']
+
+        if self.mode == "backtest":
+            self.logger.info("using cached csv")
+        else:
+            self.update_historical_data_csv()
+
+        df_short_raw, df_medium_raw, df_long_raw = self.read_raw_data_frames()
+
+        df_short, df_medium, df_long = self.add_indicators_to_data_frames(df_short_raw, df_medium_raw, df_long_raw)
+
+        assert df_short.shape[1] == df_medium.shape[1] == df_long.shape[1]
+
+        short_df_with_signals, medium_df_with_signals, long_df_with_signals = self.add_signals_to_data_frames(
+            df_short, df_medium, df_long)
 
         aggregated_df = short_term_df_with_other_time_frames_signals(short_df_with_signals,
                                                                      medium_df_with_signals,
@@ -95,7 +136,8 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         df_with_indicators['Stop loss'] = False
         df_with_indicators['Take profit'] = False
 
-        for idx, row in df_with_indicators.iterrows():
+        def process_row(row):
+            nonlocal self
             # Buy
             if not (self.in_position) and self.buy_condition(row):
                 row['Buy'] = True
@@ -113,8 +155,9 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
                     row['Take profit'] = True
                     self.in_position = False
 
-            df_with_indicators.loc[idx] = row
+            return row
 
+        df_with_indicators = df_with_indicators.apply(process_row, axis=1)
         return df_with_indicators
 
     def buy_condition(self, row):
@@ -129,21 +172,15 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
         df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
         return df_with_buy_sl_tp_columns
-        # df_with_buy_sl_tp_columns.to_csv('df_with_buy_sl_tp_columns.csv')
-
-        # plot_close_price_with_signals(df_with_buy_sl_tp_columns)
         # self.stop()
 
     def run_live(self):
-        self.logger.info('starting live trading')
-        # while not self.exit_flag.is_set():
-        #     self.logger.info('getting fresh data, aggregate time frames & compute indicators columns')
-        #     df_aggregated = self.get_short_df_with_higher_tf_signals()
-        #
-        #     signals = self.apply_strategy_to_df(df)
-        #     self.logger.info('plotting ...')
-        #     plot_close_price_with_signals(df, signals)
-        #     self.stop()
+        while not self.exit_flag.is_set():
+            self.logger.info('starting live trading')
+            short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
+            df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+            print(df_with_buy_sl_tp_columns)
+            self.stop()
 
     def run(self):
         if self.mode == "backtest":

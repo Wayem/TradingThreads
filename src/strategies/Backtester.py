@@ -1,13 +1,16 @@
-from typing import Dict, List
+from typing import List
 from src.strategies import BaseStrategyThread
 from src.strategies.PlaceOcoWhenItsTime import PlaceOcoWhenItsTime
 import matplotlib.pyplot as plt
 
+from src.utils import plot_close_price_with_signals
+
 
 class Backtester():
-    def __init__(self, strategies: List[BaseStrategyThread]):
+    def __init__(self, strategies: List[BaseStrategyThread], plot = True):
         self.client = None  # shouldnt have to use this for backstest. Local data only
         self.strategies_list: List[BaseStrategyThread] = strategies
+        self.plot = plot
 
         self.dct_of_df_with_buy_sl_tp_columns = {s.name: None for s in self.strategies_list}
 
@@ -17,6 +20,10 @@ class Backtester():
         for strategy_name, strategy in zip([s.name for s in self.strategies_list], self.strategies_list):
             df_with_buy_sl_tp_columns = strategy.run()
             self.dct_of_df_with_buy_sl_tp_columns.update({strategy.name: df_with_buy_sl_tp_columns})
+            self.add_performance_column(strategy_name)
+            if self.plot:
+                plot_close_price_with_signals(df_with_buy_sl_tp_columns)
+                self.plot_performance(strategy_name)
 
         # Read perfs columns freshly added
         last_perfs_values = self.latest_perf_values()
@@ -87,11 +94,16 @@ if __name__ == "__main__":
 
     client = None
 
-    s2 = PlaceOcoWhenItsTime(name="s2", exchange_client= client, symbol=BTCEUR)
+    s2 = PlaceOcoWhenItsTime(name="s1", exchange_client=client, symbol=BTCEUR,
+                             long_interval='1d',
+                             medium_interval='1h',
+                             short_interval='30m',
+                             tp_threshold=0.0105,
+                             sl_ratio_to_tp_threshold=3,
+                             rsi_oversold=50,
+                             consecutive_hist_before_momentum=5)
 
     backtester = Backtester([s2])
 
     latest_perf_values = backtester.run()  # {"s2": "0.78", "s1": "1.12"}
     print(f'last_perfs_values : {latest_perf_values}')
-
-    backtester.plot_performance('s2')
