@@ -109,6 +109,24 @@ def interval_to_milliseconds(interval: str) -> int:
 
     return ms
 
+def interval_to_minutes(interval: str) -> int:
+    """Convert a string interval to the number of minutes"""
+    minutes = None
+    if interval.endswith("m"):
+        minutes = int(interval[:-1])
+    elif interval.endswith("h"):
+        minutes = int(interval[:-1]) * 60
+    elif interval.endswith("d"):
+        minutes = int(interval[:-1]) * 24 * 60
+    elif interval.endswith("w"):
+        minutes = int(interval[:-1]) * 7 * 24 * 60
+    elif interval.endswith("M"):
+        minutes = int(interval[:-1]) * 30 * 24 * 60
+    else:
+        raise Exception("Invalid interval")
+
+    return minutes
+
 
 ## <Signals & indicators> ##
 def _add_macd_momentum(df, prefix, consecutive_rows):

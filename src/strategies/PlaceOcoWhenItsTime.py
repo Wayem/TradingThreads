@@ -1,14 +1,17 @@
 from datetime import datetime, timedelta
 
 import pandas as pd
+import pytz as pytz
+import schedule
+import time
 
+from src.Constants import LOCAL_TZ
 from src.api import BinanceAPIClient
 from src.strategies import BaseStrategyThread
 from src.utils import add_indicators, add_indicators_signals, \
-    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX
+    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes
 
 KNOWN_MODES = ["backtest", "live"]
-
 
 class PlaceOcoWhenItsTime(BaseStrategyThread):
     def __init__(self, name: str,
@@ -47,7 +50,6 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         self.consecutive_hist_before_momentum = consecutive_hist_before_momentum
         ##
 
-
     def update_historical_data_csv(self):
         if self.mode == "live":
             start_long = datetime.now() - timedelta(days=self.live_long_interval_nb_days_lookup)
@@ -59,6 +61,8 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
                                                             start_medium)
             self.exchange_client.update_historical_data_csv(self.symbol, self.short_interval,
                                                             start_short)
+        elif self.mode == "backtest":
+            self.logger.info("using cached csv")
 
     def read_raw_data_frames(self):
         df_short_raw = pd.read_csv(f'{self.symbol}_{self.short_interval}.csv')
@@ -109,10 +113,7 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
     def get_short_df_with_higher_tf_signals(self):
         assert self.mode in ['backtest', 'live']
 
-        if self.mode == "backtest":
-            self.logger.info("using cached csv")
-        else:
-            self.update_historical_data_csv()
+        self.update_historical_data_csv()
 
         df_short_raw, df_medium_raw, df_long_raw = self.read_raw_data_frames()
 
@@ -129,6 +130,14 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
 
         signals_columns = [col for col in aggregated_df.columns if SIGNAL_PREFIX in col]
         aggregated_df.loc[:, signals_columns] = aggregated_df.loc[:, signals_columns].fillna(False)
+
+        aggregated_df['Open time'] = pd.to_datetime(aggregated_df['Open time'])
+        aggregated_df['Close time'] = pd.to_datetime(aggregated_df['Close time'])
+
+        aggregated_df[f'Open time {LOCAL_TZ}'] = aggregated_df['Open time'].dt.tz_localize('UTC').dt.tz_convert(
+            LOCAL_TZ)
+        aggregated_df[f'Close time {LOCAL_TZ}'] = aggregated_df['Close time'].dt.tz_localize('UTC').dt.tz_convert(
+            LOCAL_TZ)
         return aggregated_df
 
     def apply_strategy(self, df_with_indicators: pd.DataFrame):
@@ -172,18 +181,70 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
         short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
         df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
         return df_with_buy_sl_tp_columns
-        # self.stop()
+
+    def is_current_time_close_to_last_row(self, df, threshold_seconds=30):
+        # Get the close time of the last row
+        last_row_close_time = df.iloc[-1][f'Close time {LOCAL_TZ}']
+
+        # Get the current time and calculate the time difference between the expected close time and the current time
+        current_dt = datetime.now(pytz.UTC).astimezone(pytz.timezone(LOCAL_TZ))
+        time_difference = abs(current_dt - last_row_close_time)
+
+        # Check if the time difference is within the threshold
+        if time_difference.seconds <= threshold_seconds:
+            return True
+        else:
+            return False
 
     def run_live(self):
-        while not self.exit_flag.is_set():
-            self.logger.info('starting live trading')
-            short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
-            df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
-            print(df_with_buy_sl_tp_columns)
-            self.stop()
+        self.logger.info('starting live trading')
+        short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
+        df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+
+        if self.is_current_time_close_to_last_row(df_with_buy_sl_tp_columns):
+            self.logger.info("Data are fresh !")
+            if df_with_buy_sl_tp_columns.iloc[-1]['Buy'] == True:
+                self.logger.info("Got buy signal. Let's go !")
+
+        # log next jobs
+        next_executions = self.get_next_scheduled_executions()
+        for job, next_run_time in next_executions:
+            self.logger.info(f"Job: {job}, Next run time: {next_run_time}")
+
+    def get_next_scheduled_executions(self):
+        # Iterate over the scheduled jobs and find their next run times
+        next_executions = []
+        for job in schedule.get_jobs():
+            next_run_time = job.next_run.strftime("%Y-%m-%d %H:%M:%S")
+            next_executions.append((job, next_run_time))
+
+        return next_executions
+
+    def schedule_trading_strategy(self):
+        # Find the next launch time
+        current_time = datetime.now()
+
+        next_launch_time = current_time
+        minutes_to_next = 15 - (current_time.minute % 15)
+        print(f'minutes_to_next: {minutes_to_next}')
+        if minutes_to_next < 15:
+            next_launch_time += timedelta(minutes=minutes_to_next - 1)
+        next_launch_time = next_launch_time.replace(second=30) # Adjust to be 30 seconds before the quarter-hour
+
+        wait_sec = (next_launch_time - current_time).seconds
+
+        self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime("%Y-%m-%d %H:%M:%S")}')
+        time.sleep(wait_sec)
+
+        schedule.every(15).minutes.do(self.run_live)
+        self.run_live()
+
+        while True:
+            schedule.run_pending()
+            time.sleep(5)
 
     def run(self):
         if self.mode == "backtest":
             return self.backtest()
         elif self.mode == "live":
-            self.run_live()
+            self.schedule_trading_strategy()
