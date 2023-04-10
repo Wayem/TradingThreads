@@ -2,7 +2,7 @@ from tqdm import tqdm
 import pickle
 
 from src.strategies.Backtester import Backtester
-from src.strategies.PlaceOcoWhenItsTime import PlaceOcoWhenItsTime
+from src.strategies.CallStrategyAtClose import CallStrategyAtClose
 
 
 def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short_intervals, tp_thresholds,
@@ -22,8 +22,9 @@ def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short
                             for rsi_oversold in rsi_oversolds:
                                 for consecutive_hist in consecutive_hists:
                                     for symbol in symbols:
-                                        strategy = PlaceOcoWhenItsTime(
+                                        strategy = CallStrategyAtClose(
                                             name="s",
+                                            initial_investment_in_base_symbol_quantity=100,
                                             exchange_client=exchange_client,
                                             symbol=symbol,
                                             long_interval=long_interval,

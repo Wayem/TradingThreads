@@ -5,50 +5,82 @@ import pytz as pytz
 import schedule
 import time
 
-from src.Constants import LOCAL_TZ
+from src.Constants import LOCAL_TZ, PRINTED_DATE_FORMAT
 from src.api import BinanceAPIClient
 from src.strategies import BaseStrategyThread
 from src.utils import add_indicators, add_indicators_signals, \
-    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes
+    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes, nb_days_YTD
 
 KNOWN_MODES = ["backtest", "live"]
 
-class PlaceOcoWhenItsTime(BaseStrategyThread):
+
+class CallStrategyAtClose(BaseStrategyThread):
     def __init__(self, name: str,
                  exchange_client: BinanceAPIClient,
                  symbol: str,
+                 token: str,
+                 base_symbol: str,
+                 initial_investment_in_base_symbol_quantity,
                  long_interval="1d",
                  medium_interval="1h",
                  short_interval="15m",
-                 tp_threshold=0.01,
+                 tp_threshold=0.007,
                  sl_ratio_to_tp_threshold=1.5,
                  mode="backtest",
-                 rsi_oversold=30,
+                 rsi_oversold=50,
                  consecutive_hist_before_momentum=3):
         super().__init__(name=name, exchange_client=exchange_client, mode=mode)
         assert mode in KNOWN_MODES, f'strategy mode must be one of {KNOWN_MODES}'
-        self.symbol = symbol  # 'BTCEUR'
+        assert (token + base_symbol) == symbol, "wtf are you doing ?"
 
+        self.symbol = symbol  # 'BTCEUR'
+        self.token = token
+        self.base_symbol = base_symbol
+
+        self.initial_investment_in_base_symbol_quantity = initial_investment_in_base_symbol_quantity
         self.take_profit_threshold = tp_threshold
         self.stop_loss_threshold = sl_ratio_to_tp_threshold * self.take_profit_threshold
         self.in_position = False
         self.last_buy_price = None
+        self.order_ids = self._load_order_ids_from_cache()
 
         ## <multi frame> ##
         self.long_interval = long_interval
-        self.live_long_interval_nb_days_lookup = 1
+        self.live_long_interval_nb_days_lookup = nb_days_YTD()
 
         self.medium_interval = medium_interval
-        self.live_medium_interval_nb_days_lookup = 1
+        self.live_medium_interval_nb_days_lookup = 2
 
         self.short_interval = short_interval
-        self.live_short_interval_nb_days_lookup = 1
+        self.live_short_interval_nb_days_lookup = 2
         ## <multi frame> ##
 
         ## Tuning Params
         self.rsi_oversold = rsi_oversold
         self.consecutive_hist_before_momentum = consecutive_hist_before_momentum
         ##
+
+    def is_in_position(self):
+        open_orders = self.exchange_client.get_open_orders(self.token, self.base_symbol, self.strategy_name)
+
+        for order in open_orders:
+            if order.get("clientOrderId", "") in self.order_ids:
+                return True
+
+        return False
+
+    def _save_order_id_to_cache(self, order_id):
+        cache_file = f"{self.strategy_name}_order_ids_cache.txt"
+        with open(cache_file, 'a+') as file:
+            file.write(order_id + '\n')
+
+    def _load_order_ids_from_cache(self):
+        cache_file = f"{self.strategy_name}_order_ids_cache.txt"
+        try:
+            with open(cache_file, 'r') as file:
+                return [line.strip() for line in file.readlines()]
+        except FileNotFoundError:
+            return []
 
     def update_historical_data_csv(self):
         if self.mode == "live":
@@ -205,46 +237,84 @@ class PlaceOcoWhenItsTime(BaseStrategyThread):
             self.logger.info("Data are fresh !")
             if df_with_buy_sl_tp_columns.iloc[-1]['Buy'] == True:
                 self.logger.info("Got buy signal. Let's go !")
-
-        # log next jobs
-        next_executions = self.get_next_scheduled_executions()
-        for job, next_run_time in next_executions:
-            self.logger.info(f"Job: {job}, Next run time: {next_run_time}")
+                self.buy()
 
     def get_next_scheduled_executions(self):
         # Iterate over the scheduled jobs and find their next run times
         next_executions = []
         for job in schedule.get_jobs():
-            next_run_time = job.next_run.strftime("%Y-%m-%d %H:%M:%S")
+            next_run_time = job.next_run.strftime(PRINTED_DATE_FORMAT)
             next_executions.append((job, next_run_time))
 
         return next_executions
 
     def schedule_trading_strategy(self):
+        assert self.short_interval[-1] == 'm', "short interval must be minute"
+        minutes = interval_to_minutes(self.short_interval)
         # Find the next launch time
         current_time = datetime.now()
 
         next_launch_time = current_time
-        minutes_to_next = 15 - (current_time.minute % 15)
-        print(f'minutes_to_next: {minutes_to_next}')
-        if minutes_to_next < 15:
+        minutes_to_next = minutes - (current_time.minute % minutes)
+        if minutes_to_next < minutes:
             next_launch_time += timedelta(minutes=minutes_to_next - 1)
-        next_launch_time = next_launch_time.replace(second=30) # Adjust to be 30 seconds before the quarter-hour
+        next_launch_time = next_launch_time.replace(second=30)  # Adjust to be 30 seconds before
 
         wait_sec = (next_launch_time - current_time).seconds
 
-        self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime("%Y-%m-%d %H:%M:%S")}')
+        self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime(PRINTED_DATE_FORMAT)}')
         time.sleep(wait_sec)
 
-        schedule.every(15).minutes.do(self.run_live)
+        schedule.every(minutes).minutes.do(self.run_live)
         self.run_live()
 
         while True:
             schedule.run_pending()
-            time.sleep(5)
+            time.sleep(1)
+
+    def buy(self):
+        side = 'BUY'
+        quantity_in_base = self.initial_investment_in_base_symbol_quantity
+
+        # Get the current token price in the base symbol
+        prices = self.exchange_client._get_all_tickers()
+        token_price_base = None
+        for price in prices:
+            if price['symbol'] == self.token + self.base_symbol:
+                token_price_base = float(price['price'])
+                break
+
+        quantity = quantity_in_base / token_price_base
+
+        # Define the prices for the OCO order (you can adjust these values based on your strategy)
+        stop_loss_price = token_price_base * (1 - self.stop_loss_threshold * 0.984)
+        stop_limit_price = stop_loss_price * (1 - self.stop_loss_threshold)
+        take_profit_price = token_price_base * (1 + self.take_profit_threshold)
+        order_id = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
+        self.order_ids.append(order_id)
+        self.save_order_id_to_cache(order_id)
+
+        self.exchange_client.place_oco_order(side=side,
+                                             token=self.token,
+                                             base_symbol=self.base_symbol,
+                                             quantity=quantity,
+                                             stop_loss_price=stop_loss_price,
+                                             stop_limit_price=stop_limit_price,
+                                             take_profit_price=take_profit_price,
+                                             custom_order_id=order_id)
+
 
     def run(self):
         if self.mode == "backtest":
             return self.backtest()
         elif self.mode == "live":
-            self.schedule_trading_strategy()
+            self.logger.info(f'{self.name} going: '
+                             f'OCO,'
+                             f'{self.symbol},'
+                             f'{self.initial_investment_in_base_symbol_quantity}{self.base_symbol},'
+                             f'tp {self.take_profit_threshold},'
+                             f'sl {self.stop_loss_threshold},')
+            if self.is_in_position():
+                self.logger.info(f"{self.name} already in position. doing nothing")
+            else:
+                self.schedule_trading_strategy()

@@ -228,7 +228,8 @@ class BinanceAPIClient:
             raise Exception(f"Error {response['code']}: {response['msg']}")
 
     def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price, stop_limit_price,
-                        take_profit_price):
+                        take_profit_price, custom_id):
+
         if side not in ['BUY', 'SELL']:
             raise ValueError("Invalid order side. Must be 'BUY' or 'SELL'.")
 
@@ -245,6 +246,7 @@ class BinanceAPIClient:
             'stopLimitPrice': f"{stop_limit_price:.8f}",
             'stopLimitTimeInForce': 'GTC',
             'price': f"{take_profit_price:.8f}",
+            'newClientOrderId': custom_id
         }
 
         # Execute the OCO order
@@ -282,14 +284,15 @@ class BinanceAPIClient:
             chunk_end_millis = min(end_time_ms, chunk_start_millis + ms_interval * chunk_size)
 
             chunk_start_time = datetime.utcfromtimestamp(chunk_start_millis / 1000)
-            chunk_end_time = datetime.utcfromtimestamp(chunk_end_millis / 1000) if not(last_loop) else None
+            chunk_end_time = datetime.utcfromtimestamp(chunk_end_millis / 1000) if not (last_loop) else None
 
             # Call the get_historical_data function to retrieve data for the current chunk
             chunk_data = self.get_historical_data(symbol, interval, chunk_start_time, chunk_end_time)
 
             LOCAL_TZ = 'Europe/Paris'
             chunk_data[f'Open time {LOCAL_TZ}'] = chunk_data['Open time'].dt.tz_localize('UTC').dt.tz_convert(LOCAL_TZ)
-            chunk_data[f'Close time {LOCAL_TZ}'] = chunk_data['Close time'].dt.tz_localize('UTC').dt.tz_convert(LOCAL_TZ)
+            chunk_data[f'Close time {LOCAL_TZ}'] = chunk_data['Close time'].dt.tz_localize('UTC').dt.tz_convert(
+                LOCAL_TZ)
 
             # Append the chunk data to the results list
             results.append(chunk_data)
@@ -298,9 +301,14 @@ class BinanceAPIClient:
         df = pd.concat(results)
         df.drop_duplicates(subset=['Open time'])
 
-        csv: str = f'{symbol}_{interval}.csv' # start_time.strftime("%Y-%m-%d")
+        csv: str = f'{symbol}_{interval}.csv'  # start_time.strftime("%Y-%m-%d")
         logger.info(csv)
         # Save the dataframe to a CSV file
         df.to_csv(csv, index=False)
 
         return df
+
+    def get_open_orders(self, token, base_symbol, strategy_name):
+        open_orders = self._request("GET", "/api/v3/openOrders", {"symbol": token + base_symbol})
+
+        return open_orders

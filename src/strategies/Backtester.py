@@ -1,6 +1,6 @@
 from typing import List
 from src.strategies import BaseStrategyThread
-from src.strategies.PlaceOcoWhenItsTime import PlaceOcoWhenItsTime
+from src.strategies.CallStrategyAtClose import CallStrategyAtClose
 import matplotlib.pyplot as plt
 
 from src.utils import plot_close_price_with_signals
@@ -29,15 +29,15 @@ class Backtester():
         last_perfs_values = self.latest_perf_values()
         return last_perfs_values  # {"s2": "0.78", "s1": "1.12"}
 
-    def _get_params(self, strategy_name: str):
+    def _strategies_attributes(self, strategy_name: str):
         s = [s for s in self.strategies_list if s.name == strategy_name][0]
-        return s.initial_investment, \
+        return s.initial_investment_in_base_symbol_quantity, \
             s.stop_loss_threshold, \
             s.take_profit_threshold
 
     def add_performance_column(self, strategy_name):
         df = self.dct_of_df_with_buy_sl_tp_columns[strategy_name]
-        initial_investment, stop_loss, take_profit = self._get_params(strategy_name)
+        initial_investment, stop_loss, take_profit = self._strategies_attributes(strategy_name)
 
         portfolio_value = initial_investment
         in_market = False
@@ -94,7 +94,8 @@ if __name__ == "__main__":
 
     client = None
 
-    s2 = PlaceOcoWhenItsTime(name="s1", exchange_client=client, symbol=BTCEUR,
+    s2 = CallStrategyAtClose(name="s1", exchange_client=client, symbol=BTCEUR,
+                             initial_investment_in_base_symbol_quantity= 100,
                              long_interval='1d',
                              medium_interval='1h',
                              short_interval='30m',

@@ -9,7 +9,7 @@ class BaseStrategyThread(threading.Thread):
     def __init__(self, name, exchange_client, mode = "backtest", initial_investment = 100):
         threading.Thread.__init__(self, name=name)
         self.exchange_client = exchange_client
-        self.initial_investment = initial_investment
+        self.initial_investment_in_base_symbol_quantity = initial_investment
         self.strategy_name = name
         self.mode = mode
         self.exit_flag = threading.Event()
@@ -17,7 +17,7 @@ class BaseStrategyThread(threading.Thread):
         # this whole stuff just for logs
         self.logger = logging.getLogger(self.strategy_name)
         file_handler = logging.FileHandler(f'logs/{self.strategy_name}.log')
-        file_handler.setLevel(logging.ERROR)
+        file_handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
