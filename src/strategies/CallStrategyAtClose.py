@@ -9,7 +9,8 @@ from src.Constants import LOCAL_TZ, PRINTED_DATE_FORMAT
 from src.api import BinanceAPIClient
 from src.strategies import BaseStrategyThread
 from src.utils import add_indicators, add_indicators_signals, \
-    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes, nb_days_YTD
+    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes, nb_days_YTD, round_to_tick_size, \
+    round_to_step_size, validate_oco_prices
 
 KNOWN_MODES = ["backtest", "live"]
 
@@ -37,7 +38,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         self.token = token
         self.base_symbol = base_symbol
 
-        self.initial_investment_in_base_symbol_quantity = initial_investment_in_base_symbol_quantity
+        self.base_symbol_quantity = initial_investment_in_base_symbol_quantity
         self.take_profit_threshold = tp_threshold
         self.stop_loss_threshold = sl_ratio_to_tp_threshold * self.take_profit_threshold
         self.in_position = False
@@ -52,7 +53,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         self.live_medium_interval_nb_days_lookup = 2
 
         self.short_interval = short_interval
-        self.live_short_interval_nb_days_lookup = 2
+        self.live_short_interval_nb_days_lookup = 0.5
         ## <multi frame> ##
 
         ## Tuning Params
@@ -61,6 +62,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         ##
 
     def is_in_position(self):
+        self.logger.info(f'{self.name} not in position')
         open_orders = self.exchange_client.get_open_orders(self.token, self.base_symbol, self.strategy_name)
 
         for order in open_orders:
@@ -180,7 +182,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         def process_row(row):
             nonlocal self
             # Buy
-            if not (self.in_position) and self.buy_condition(row):
+            if self.buy_condition(row):
                 row['Buy'] = True
                 self.in_position = True
                 self.last_buy_price = row['Close']
@@ -202,6 +204,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         return df_with_indicators
 
     def buy_condition(self, row):
+        return True
         long_term_cond = row[f'{self.long_interval}_ema_short_above_long_{SIGNAL_PREFIX}']
         medium_term_cond = row[f'{self.medium_interval}_momentum_up_{SIGNAL_PREFIX}']
         short_term_cond = row[f'{self.short_interval}_oversold_{SIGNAL_PREFIX}']
@@ -235,7 +238,8 @@ class CallStrategyAtClose(BaseStrategyThread):
 
         if self.is_current_time_close_to_last_row(df_with_buy_sl_tp_columns):
             self.logger.info("Data are fresh !")
-            if df_with_buy_sl_tp_columns.iloc[-1]['Buy'] == True:
+            print(df_with_buy_sl_tp_columns.iloc[-1])
+            if df_with_buy_sl_tp_columns.iloc[-1]['Buy']:
                 self.logger.info("Got buy signal. Let's go !")
                 self.buy()
 
@@ -273,9 +277,6 @@ class CallStrategyAtClose(BaseStrategyThread):
             time.sleep(1)
 
     def buy(self):
-        side = 'BUY'
-        quantity_in_base = self.initial_investment_in_base_symbol_quantity
-
         # Get the current token price in the base symbol
         prices = self.exchange_client._get_all_tickers()
         token_price_base = None
@@ -284,25 +285,74 @@ class CallStrategyAtClose(BaseStrategyThread):
                 token_price_base = float(price['price'])
                 break
 
-        quantity = quantity_in_base / token_price_base
-
-        # Define the prices for the OCO order (you can adjust these values based on your strategy)
-        stop_loss_price = token_price_base * (1 - self.stop_loss_threshold * 0.984)
-        stop_limit_price = stop_loss_price * (1 - self.stop_loss_threshold)
+        # Define the prices for & quantity the OCO order
+        ## <oco>
+        oco_token_quantity = self.base_symbol_quantity / token_price_base
+        stop_limit_price = token_price_base * (1 - self.stop_loss_threshold)
+        stop_price = token_price_base * (1 - self.stop_loss_threshold * 0.984)
         take_profit_price = token_price_base * (1 + self.take_profit_threshold)
-        order_id = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
+
+        computed_prices_str = ','.join([f"token_price_base: {token_price_base}",
+                                        f"stop_limit_price: {stop_limit_price}",
+                                        f"stop_price: {stop_price}",
+                                        f"take_profit_price: {take_profit_price}",
+                                        f"quantity: {oco_token_quantity}"])
+        self.logger.info(f'computed prices: {computed_prices_str}')
+        ## <oco>
+
+        validate_oco_prices(side='SELL', stop_price=stop_price, stop_limit_price=stop_limit_price,
+                            take_profit_price=take_profit_price)
+
+        # 1. place and log market order
+        # <market>
+        order_id = f'{self.strategy_name}_{datetime.now().strftime("%Y%m%d%H%M%S%f")}'
+        self.logger.info(f'placing maket {order_id} for {self.base_symbol_quantity}{self.base_symbol}')
+        executed_qty, last_buy_price = self.exchange_client.place_vanilla_order('MARKET', 'BUY', self.token,
+                                                                                self.base_symbol,
+                                                                                amount_base=self.base_symbol_quantity,
+                                                                                custom_order_id=order_id)
         self.order_ids.append(order_id)
-        self.save_order_id_to_cache(order_id)
+        self._save_order_id_to_cache(order_id)
 
-        self.exchange_client.place_oco_order(side=side,
-                                             token=self.token,
-                                             base_symbol=self.base_symbol,
-                                             quantity=quantity,
-                                             stop_loss_price=stop_loss_price,
-                                             stop_limit_price=stop_limit_price,
-                                             take_profit_price=take_profit_price,
-                                             custom_order_id=order_id)
+        self.base_symbol_quantity = executed_qty
+        # </market>
 
+        self.logger.info(
+            f'placed maket {order_id} bought {executed_qty}{self.token} at {last_buy_price}{self.base_symbol} each')
+        time.sleep(2)
+
+        # <retries mechanism>
+        max_retries = 5
+        retries = 0
+        while retries < max_retries:
+            try:
+                # 2. place and log sell oco
+                # <oco>
+                order_id = f'{self.strategy_name}_{datetime.now().strftime("%Y%m%d%H%M%S%f")}'
+                self.exchange_client.place_oco_order(side='SELL',
+                                                     token=self.token,
+                                                     base_symbol=self.base_symbol,
+                                                     quantity=oco_token_quantity,
+                                                     stop_price=stop_price,
+                                                     stop_limit_price=stop_limit_price,
+                                                     take_profit_price=take_profit_price,
+                                                     custom_order_id=order_id)
+                self.order_ids.append(order_id)
+                self._save_order_id_to_cache(order_id)
+                # </oco>
+                break  # If the order is placed successfully, break the loop
+            except Exception as e:
+                retries += 1
+                self.logger.info(f"Attempt {retries} failed. Error: {str(e)}. sleeping 20 sec and re-trying")
+                time.sleep(20)
+
+                if retries == max_retries:
+                    self.logger.info(f"Failed to place the OCO order after {max_retries} attempts.")
+                    # Implement an email alert or any other notification here
+        # </retries mechanism>
+
+        self.logger.info(
+            f"placed sell oco {order_id} on {self.token} sl {stop_limit_price} ; sp {stop_price} ; tp {take_profit_price}")
 
     def run(self):
         if self.mode == "backtest":

@@ -57,6 +57,12 @@ def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short
     return results
 
 
+def print_cached_results():
+    with open('sorted_results.pkl', 'rb') as f:
+        sorted_results = pickle.load(f)
+    print(sorted_results)
+
+
 if __name__ == "__main__":
     btc = "BTC"
     ada = "ADA"

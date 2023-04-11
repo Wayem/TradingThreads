@@ -226,3 +226,17 @@ def short_term_df_with_other_time_frames_signals(short_df_with_signals, *other_t
     return merged_df
 
 ## </Signals & indicators> ##
+
+def round_to_tick_size(value, tick_size):
+    return round(value / tick_size) * tick_size
+
+def round_to_step_size(value, step_size):
+    return round(value / step_size) * step_size
+
+def validate_oco_prices(side, stop_price, stop_limit_price, take_profit_price):
+    if side == 'BUY':
+        if stop_limit_price <= stop_price or take_profit_price <= stop_limit_price:
+            raise ValueError("For a BUY order, the stop limit price must be higher than the stop loss price, and the take profit price must be higher than the stop limit price.")
+    elif side == 'SELL':
+        if stop_limit_price >= stop_price or take_profit_price <= stop_limit_price:
+            raise ValueError("For a SELL order, the stop limit price must be lower than the stop loss price, and the take profit price must be higher than the stop limit price.")

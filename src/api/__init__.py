@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import pandas as pd
 import logging
 
-from src.utils import make_df, interval_to_milliseconds
+from src.utils import make_df, interval_to_milliseconds, round_to_step_size, round_to_tick_size
 import time
 import cachetools
 import functools
@@ -171,7 +171,7 @@ class BinanceAPIClient:
         return token_value_in_currency
 
     def place_vanilla_order(self, order_type, side, token, base_symbol, *, quantity=None, amount_base=None,
-                            limit_price=None, stop_loss_price=None):
+                            limit_price=None, stop_loss_price=None, custom_order_id = None):
         if token == base_symbol:
             raise ValueError("Cannot trade a symbol against itself.")
 
@@ -211,15 +211,28 @@ class BinanceAPIClient:
             'symbol': token + base_symbol,
             'side': side,
             'type': order_type,
-            'quantity': round(quantity, 8),  # Round the quantity to 8 decimal places
         }
 
+        # Add custom_order_id to the parameters if provided
+        if custom_order_id is not None:
+            params['newClientOrderId'] = custom_order_id
+
+        # Get symbol filters
+        filters = self.get_symbol_filters(token + base_symbol)
+
+        # Round quantity and prices according to the filters
+        quantity = round_to_step_size(quantity, filters['stepSize'])
         if order_type in ['LIMIT', 'STOP_LOSS_LIMIT']:
+            limit_price = round_to_tick_size(limit_price, filters['tickSize'])
             params['price'] = f"{limit_price:.8f}"
             params['timeInForce'] = 'GTC'
 
         if order_type == 'STOP_LOSS_LIMIT':
+            stop_loss_price = round_to_tick_size(stop_loss_price, filters['tickSize'])
             params['stopPrice'] = f"{stop_loss_price:.8f}"
+
+        # Add rounded quantity to the parameters
+        params['quantity'] = f"{quantity:.8f}"
 
         # Execute the order
         response = self._request("POST", endpoint, params)
@@ -227,8 +240,25 @@ class BinanceAPIClient:
         if response.get("code"):
             raise Exception(f"Error {response['code']}: {response['msg']}")
 
-    def place_oco_order(self, side, token, base_symbol, *, quantity, stop_loss_price, stop_limit_price,
-                        take_profit_price, custom_id):
+        # If the order is a market order, return the executed quantity and executed price
+        if order_type == 'MARKET':
+            executed_qty = 0
+            executed_price = 0
+            total_quote_qty = 0
+            for fill in response.get('fills', []):
+                fill_qty = float(fill['qty'])
+                fill_price = float(fill['price'])
+                executed_qty += fill_qty
+                total_quote_qty += fill_qty * fill_price
+
+            executed_price = total_quote_qty / executed_qty if executed_qty != 0 else 0
+            return executed_qty, executed_price
+
+        # For other order types, you may return the whole response or any other relevant information
+        return response
+
+    def place_oco_order(self, side, token, base_symbol, *, quantity, stop_price, stop_limit_price,
+                        take_profit_price, custom_order_id):
 
         if side not in ['BUY', 'SELL']:
             raise ValueError("Invalid order side. Must be 'BUY' or 'SELL'.")
@@ -236,17 +266,26 @@ class BinanceAPIClient:
         if token == base_symbol:
             raise ValueError("Cannot trade a symbol against itself.")
 
+        # Get symbol filters
+        filters = self.get_symbol_filters(token + base_symbol)
+
+        # Round quantity and prices according to the filters
+        quantity = round_to_step_size(quantity, filters['stepSize'])
+        stop_price = round_to_tick_size(stop_price, filters['tickSize'])
+        stop_limit_price = round_to_tick_size(stop_limit_price, filters['tickSize'])
+        take_profit_price = round_to_tick_size(take_profit_price, filters['tickSize'])
+
         # Prepare the OCO order parameters
         endpoint = "/api/v3/order/oco"
         params = {
             'symbol': token + base_symbol,
             'side': side,
-            'quantity': round(quantity, 8),  # Round the quantity to 8 decimal places
-            'stopPrice': f"{stop_loss_price:.8f}",
+            'quantity': f"{quantity:.8f}",
+            'stopPrice': f"{stop_price:.8f}",
             'stopLimitPrice': f"{stop_limit_price:.8f}",
             'stopLimitTimeInForce': 'GTC',
             'price': f"{take_profit_price:.8f}",
-            'newClientOrderId': custom_id
+            'limitClientOrderId': custom_order_id
         }
 
         # Execute the OCO order
@@ -254,6 +293,8 @@ class BinanceAPIClient:
 
         if response.get("code"):
             raise Exception(f"Error {response['code']}: {response['msg']}")
+
+
 
     def update_historical_data_csv(self, symbol: str, interval: str, start_time: datetime,
                                    end_time: datetime = datetime.now(),
@@ -312,3 +353,27 @@ class BinanceAPIClient:
         open_orders = self._request("GET", "/api/v3/openOrders", {"symbol": token + base_symbol})
 
         return open_orders
+
+    def get_symbol_filters(self, symbol):
+        endpoint = "/api/v3/exchangeInfo"
+        response = self._request("GET", endpoint, signed=False)
+
+        if response.get("code"):
+            raise Exception(f"Error {response['code']}: {response['msg']}")
+
+        for s in response['symbols']:
+            if s['symbol'] == symbol:
+                filters = {}
+                for f in s['filters']:
+                    if f['filterType'] == 'PRICE_FILTER':
+                        filters['minPrice'] = float(f['minPrice'])
+                        filters['maxPrice'] = float(f['maxPrice'])
+                        filters['tickSize'] = float(f['tickSize'])
+                    elif f['filterType'] == 'LOT_SIZE':
+                        filters['minQty'] = float(f['minQty'])
+                        filters['maxQty'] = float(f['maxQty'])
+                        filters['stepSize'] = float(f['stepSize'])
+
+                return filters
+
+        raise ValueError(f"Symbol {symbol} not found.")
