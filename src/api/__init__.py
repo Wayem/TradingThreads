@@ -243,16 +243,20 @@ class BinanceAPIClient:
         # If the order is a market order, return the executed quantity and executed price
         if order_type == 'MARKET':
             executed_qty = 0
-            executed_price = 0
             total_quote_qty = 0
+            total_fee = 0
             for fill in response.get('fills', []):
                 fill_qty = float(fill['qty'])
                 fill_price = float(fill['price'])
+                fee = float(fill['commission'])  # assuming the fee is in the 'commission' field, adjust if needed
                 executed_qty += fill_qty
                 total_quote_qty += fill_qty * fill_price
+                total_fee += fee
 
             executed_price = total_quote_qty / executed_qty if executed_qty != 0 else 0
-            return executed_qty, executed_price
+            quantity_after_fees = executed_qty - total_fee
+
+            return quantity_after_fees, executed_price
 
         # For other order types, you may return the whole response or any other relevant information
         return response

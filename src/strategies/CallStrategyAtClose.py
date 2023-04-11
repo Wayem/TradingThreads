@@ -204,7 +204,6 @@ class CallStrategyAtClose(BaseStrategyThread):
         return df_with_indicators
 
     def buy_condition(self, row):
-        return True
         long_term_cond = row[f'{self.long_interval}_ema_short_above_long_{SIGNAL_PREFIX}']
         medium_term_cond = row[f'{self.medium_interval}_momentum_up_{SIGNAL_PREFIX}']
         short_term_cond = row[f'{self.short_interval}_oversold_{SIGNAL_PREFIX}']
@@ -233,15 +232,18 @@ class CallStrategyAtClose(BaseStrategyThread):
 
     def run_live(self):
         self.logger.info('starting live trading')
-        short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
-        df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+        if self.is_in_position():
+            self.logger.info(f"{self.name} already in position. doing nothing")
+        else:
 
-        if self.is_current_time_close_to_last_row(df_with_buy_sl_tp_columns):
-            self.logger.info("Data are fresh !")
-            print(df_with_buy_sl_tp_columns.iloc[-1])
-            if df_with_buy_sl_tp_columns.iloc[-1]['Buy']:
-                self.logger.info("Got buy signal. Let's go !")
-                self.buy()
+            short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
+            df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+
+            if self.is_current_time_close_to_last_row(df_with_buy_sl_tp_columns):
+                self.logger.info("Data are fresh !")
+                if df_with_buy_sl_tp_columns.iloc[-1]['Buy']:
+                    self.logger.info("Got buy signal. Let's go !")
+                    self.buy()
 
     def get_next_scheduled_executions(self):
         # Iterate over the scheduled jobs and find their next run times
@@ -364,7 +366,4 @@ class CallStrategyAtClose(BaseStrategyThread):
                              f'{self.initial_investment_in_base_symbol_quantity}{self.base_symbol},'
                              f'tp {self.take_profit_threshold},'
                              f'sl {self.stop_loss_threshold},')
-            if self.is_in_position():
-                self.logger.info(f"{self.name} already in position. doing nothing")
-            else:
-                self.schedule_trading_strategy()
+            self.schedule_trading_strategy()

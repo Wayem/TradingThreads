@@ -37,15 +37,15 @@ if __name__ == "__main__":
     kp_secrets = runstep("keepass access", extract_kp_secrets)
     client = BinanceAPIClient(kp_secrets["BNB_API_KEY"], kp_secrets["BNB_SECRET_KEY"])
 
-    s2 = CallStrategyAtClose(name="oco_poulain",
+    s2 = CallStrategyAtClose(name="oco_safe",
                              initial_investment_in_base_symbol_quantity= 100,
                              long_interval='1d',
                              medium_interval='1h',
                              short_interval='15m',
-                             tp_threshold=0.05,
-                             sl_ratio_to_tp_threshold=2.2,
-                             rsi_oversold=30,
-                             consecutive_hist_before_momentum=3,
+                             tp_threshold=0.0105,
+                             sl_ratio_to_tp_threshold=1.5,
+                             rsi_oversold=50,
+                             consecutive_hist_before_momentum=8,
                              exchange_client= client,
                              token = "BNB",
                              base_symbol = "EUR",
