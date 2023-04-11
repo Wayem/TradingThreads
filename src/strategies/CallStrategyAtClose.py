@@ -9,8 +9,7 @@ from src.Constants import LOCAL_TZ, PRINTED_DATE_FORMAT
 from src.api import BinanceAPIClient
 from src.strategies import BaseStrategyThread
 from src.utils import add_indicators, add_indicators_signals, \
-    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes, nb_days_YTD, round_to_tick_size, \
-    round_to_step_size, validate_oco_prices
+    short_term_df_with_other_time_frames_signals, SIGNAL_PREFIX, interval_to_minutes, nb_days_YTD, validate_oco_prices
 
 KNOWN_MODES = ["backtest", "live"]
 
@@ -210,12 +209,6 @@ class CallStrategyAtClose(BaseStrategyThread):
 
         return long_term_cond & medium_term_cond & short_term_cond
 
-    def backtest(self) -> pd.DataFrame:  # df_with_buy_sl_tp_columns
-        self.logger.info(f"backtesting {self.name} on local data")
-        short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
-        df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
-        return df_with_buy_sl_tp_columns
-
     def is_current_time_close_to_last_row(self, df, threshold_seconds=30):
         # Get the close time of the last row
         last_row_close_time = df.iloc[-1][f'Close time {LOCAL_TZ}']
@@ -230,14 +223,20 @@ class CallStrategyAtClose(BaseStrategyThread):
         else:
             return False
 
+
+    def get_df_with_buy_sl_tp_columns(self):
+        self.logger.info(f"backtesting {self.name} on local data")
+        short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
+        self.logger.info('applying strategy ...')
+        df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+        return df_with_buy_sl_tp_columns
+
     def run_live(self):
         self.logger.info('starting live trading')
         if self.is_in_position():
             self.logger.info(f"{self.name} already in position. doing nothing")
         else:
-
-            short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
-            df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
+            df_with_buy_sl_tp_columns = self.get_df_with_buy_sl_tp_columns()
 
             if self.is_current_time_close_to_last_row(df_with_buy_sl_tp_columns):
                 self.logger.info("Data are fresh !")
@@ -358,7 +357,7 @@ class CallStrategyAtClose(BaseStrategyThread):
 
     def run(self):
         if self.mode == "backtest":
-            return self.backtest()
+            return self.get_df_with_buy_sl_tp_columns()
         elif self.mode == "live":
             self.logger.info(f'{self.name} going: '
                              f'OCO,'

@@ -21,12 +21,14 @@ def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short
                         for sl_ratio_to_tp_threshold in sl_ratio_to_tp_thresholds:
                             for rsi_oversold in rsi_oversolds:
                                 for consecutive_hist in consecutive_hists:
-                                    for symbol in symbols:
+                                    for symbol_tuple in symbols:
                                         strategy = CallStrategyAtClose(
                                             name="s",
                                             initial_investment_in_base_symbol_quantity=100,
                                             exchange_client=exchange_client,
-                                            symbol=symbol,
+                                            symbol=symbol_tuple[0] + symbol_tuple[1],
+                                            token=symbol_tuple[0],
+                                            base_symbol=symbol_tuple[1],
                                             long_interval=long_interval,
                                             medium_interval=medium_interval,
                                             short_interval=short_interval,
@@ -41,7 +43,7 @@ def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short
                                         score = latest_perf_values["s"]
 
                                         params = {
-                                            'symbol': symbol,
+                                            'symbol': symbol_tuple[0] + symbol_tuple[1],
                                             'long_interval': long_interval,
                                             'medium_interval': medium_interval,
                                             'short_interval': short_interval,
@@ -60,7 +62,7 @@ def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short
 def print_cached_results():
     with open('sorted_results.pkl', 'rb') as f:
         sorted_results = pickle.load(f)
-    print(sorted_results)
+    print(sorted_results[0:20])
 
 
 if __name__ == "__main__":
@@ -75,13 +77,13 @@ if __name__ == "__main__":
 
     results = gridsearch(
         exchange_client=client,
-        symbols=[BNBEUR],
-        long_intervals=["1d"],
-        medium_intervals=["1h", "4h"],
+        symbols=[(bnb, eur)],
+        long_intervals=["1d", "4h"],
+        medium_intervals=["1h"],
         short_intervals=["15m", "30m", "5m"],
-        tp_thresholds=[0.0105, 0.02, 0.05],
-        sl_ratio_to_tp_thresholds=[1.5, 3],
-        rsi_oversolds=[20, 30, 50],
+        tp_thresholds=[0.0055, 0.0105, 0.02, 0.05],
+        sl_ratio_to_tp_thresholds=[1.5, 2,3],
+        rsi_oversolds=[20, 30, 40,50],
         consecutive_hists=[2, 3, 5, 8],
     )
 
