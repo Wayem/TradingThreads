@@ -225,7 +225,6 @@ class CallStrategyAtClose(BaseStrategyThread):
 
 
     def get_df_with_buy_sl_tp_columns(self):
-        self.logger.info(f"backtesting {self.name} on local data")
         short_df_with_higher_tf_signals = self.get_short_df_with_higher_tf_signals()
         self.logger.info('applying strategy ...')
         df_with_buy_sl_tp_columns = self.apply_strategy(short_df_with_higher_tf_signals)
@@ -256,26 +255,22 @@ class CallStrategyAtClose(BaseStrategyThread):
     def schedule_trading_strategy(self):
         assert self.short_interval[-1] == 'm', "short interval must be minute"
         minutes = interval_to_minutes(self.short_interval)
-        # Find the next launch time
-        current_time = datetime.now()
-
-        next_launch_time = current_time
-        minutes_to_next = minutes - (current_time.minute % minutes)
-        if minutes_to_next < minutes:
-            next_launch_time += timedelta(minutes=minutes_to_next - 1)
-        next_launch_time = next_launch_time.replace(second=30)  # Adjust to be 30 seconds before
-
-        wait_sec = (next_launch_time - current_time).seconds
-
-        self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime(PRINTED_DATE_FORMAT)}')
-        time.sleep(wait_sec)
-
-        schedule.every(minutes).minutes.do(self.run_live)
-        self.run_live()
-
         while True:
-            schedule.run_pending()
-            time.sleep(1)
+            # Find the next launch time
+            current_time = datetime.now()
+
+            minutes_to_next = minutes - (current_time.minute % minutes)
+            next_launch_time = current_time + timedelta(minutes=minutes_to_next - 1)
+            next_launch_time = next_launch_time.replace(second=int(60 - (minutes * 60)/25))  # Adjust to be n seconds before
+
+            if next_launch_time.minute == current_time.minute:
+                next_launch_time = next_launch_time + timedelta(minutes=minutes)
+
+            wait_sec = (next_launch_time - current_time).seconds
+
+            self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime(PRINTED_DATE_FORMAT)}')
+            time.sleep(wait_sec)
+            self.run_live()
 
     def buy(self):
         # Get the current token price in the base symbol

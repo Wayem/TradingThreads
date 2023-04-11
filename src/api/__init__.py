@@ -347,7 +347,7 @@ class BinanceAPIClient:
         df.drop_duplicates(subset=['Open time'])
 
         csv: str = f'{symbol}_{interval}.csv'  # start_time.strftime("%Y-%m-%d")
-        logger.info(csv)
+        logger.info(f'just updated {csv}')
         # Save the dataframe to a CSV file
         df.to_csv(csv, index=False)
 
