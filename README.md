@@ -19,6 +19,6 @@ https://docs.github.com/fr/authentication/connecting-to-github-with-ssh/generati
    $ sudo make install
 6. pip install -r requirements.txt
 7. Add main.sh at startup:
-   $ sudo crontab -e
-
-add the program you want to run on boot at the end of the file: @reboot .../main.sh
+   $ sudo crontab -e 
+   add at the end of file: @reboot .../main.sh
+8. chmod +x .../main.sh
