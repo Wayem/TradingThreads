@@ -1,6 +1,4 @@
 import os
-from datetime import datetime, timedelta
-
 import logging
 
 from src.strategies.CallStrategyAtClose import CallStrategyAtClose

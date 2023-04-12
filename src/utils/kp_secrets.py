@@ -10,7 +10,10 @@ with open('params.yaml', 'r') as f:
 
 def extract_kp_secrets():
 
-    kp_password = getpass.getpass("Veuillez entrer le mot de passe principal Keepass : ")
+    if 'kp_password' in params.keys():
+        kp_password = params['kp_password']
+    else:
+        kp_password = getpass.getpass("Veuillez entrer le mot de passe principal Keepass : ")
     database_path = params['keepass_database_path']
     assert os.path.isfile(database_path)
     keepass = PyKeePass(database_path, password=kp_password)
