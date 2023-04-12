@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import pytz as pytz
-import schedule
 import time
 
 from src.Constants import LOCAL_TZ, PRINTED_DATE_FORMAT
@@ -242,15 +241,6 @@ class CallStrategyAtClose(BaseStrategyThread):
                 if df_with_buy_sl_tp_columns.iloc[-1]['Buy']:
                     self.logger.info("Got buy signal. Let's go !")
                     self.buy()
-
-    def get_next_scheduled_executions(self):
-        # Iterate over the scheduled jobs and find their next run times
-        next_executions = []
-        for job in schedule.get_jobs():
-            next_run_time = job.next_run.strftime(PRINTED_DATE_FORMAT)
-            next_executions.append((job, next_run_time))
-
-        return next_executions
 
     def schedule_trading_strategy(self):
         assert self.short_interval[-1] == 'm', "short interval must be minute"
