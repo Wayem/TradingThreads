@@ -6,5 +6,5 @@ while ! ping -c 1 -W 1 google.fr; do
     sleep 3
 done
 
-cd /home/rasputin/suck_btc
-/home/rasputin/suck_btc/.venv/bin/python main.py
+cd /home/rasputin/TradingThreads
+/home/rasputin/TradingThreads/.venv/bin/python main.py
