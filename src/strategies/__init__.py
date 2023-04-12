@@ -2,6 +2,7 @@ import threading
 import time
 import logging
 import logging.config
+from logging.handlers import RotatingFileHandler
 
 class BaseStrategyThread(threading.Thread):
     """Classe de base pour implémenter une stratégie financière comme un thread"""
@@ -20,7 +21,7 @@ class BaseStrategyThread(threading.Thread):
         max_file_size = 3 * 1024 * 1024  # 10 MB
         backup_count = 3
 
-        file_handler = logging.RotatingFileHandler(f'logs/{self.strategy_name}.log',
+        file_handler = RotatingFileHandler(f'logs/{self.strategy_name}.log',
                                                    maxBytes = max_file_size,
                                                    backupCount = backup_count)
         file_handler.setLevel(logging.INFO)
