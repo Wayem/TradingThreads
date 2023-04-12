@@ -22,3 +22,4 @@ https://docs.github.com/fr/authentication/connecting-to-github-with-ssh/generati
    $ sudo crontab -e 
    add at the end of file: @reboot .../main.sh
 8. chmod +x .../main.sh
+9. remote.it

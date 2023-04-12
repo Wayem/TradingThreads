@@ -16,7 +16,13 @@ class BaseStrategyThread(threading.Thread):
 
         # this whole stuff just for logs
         self.logger = logging.getLogger(self.strategy_name)
-        file_handler = logging.FileHandler(f'logs/{self.strategy_name}.log')
+        # Set the max file size and the number of backup files to keep
+        max_file_size = 3 * 1024 * 1024  # 10 MB
+        backup_count = 3
+
+        file_handler = logging.RotatingFileHandler(f'logs/{self.strategy_name}.log',
+                                                   maxBytes = max_file_size,
+                                                   backupCount = backup_count)
         file_handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
