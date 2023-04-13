@@ -246,21 +246,28 @@ class CallStrategyAtClose(BaseStrategyThread):
         assert self.short_interval[-1] == 'm', "short interval must be minute"
         minutes = interval_to_minutes(self.short_interval)
         while True:
-            # Find the next launch time
-            current_time = datetime.now()
+            try:
+                # Find the next launch time
+                current_time = datetime.now()
 
-            minutes_to_next = minutes - (current_time.minute % minutes)
-            next_launch_time = current_time + timedelta(minutes=minutes_to_next - 1)
-            next_launch_time = next_launch_time.replace(second=int(60 - (minutes * 60)/25))  # Adjust to be n seconds before
+                minutes_to_next = minutes - (current_time.minute % minutes)
+                next_launch_time = current_time + timedelta(minutes=minutes_to_next - 1)
+                next_launch_time = next_launch_time.replace(second=int(60 - (minutes * 60)/25))  # Adjust to be n seconds before
 
-            if next_launch_time.minute == current_time.minute:
-                next_launch_time = next_launch_time + timedelta(minutes=minutes)
+                if next_launch_time.minute == current_time.minute:
+                    next_launch_time = next_launch_time + timedelta(minutes=minutes)
 
-            wait_sec = (next_launch_time - current_time).seconds
+                wait_sec = (next_launch_time - current_time).seconds
 
-            self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime(PRINTED_DATE_FORMAT)}')
-            time.sleep(wait_sec)
-            self.run_live()
+                self.logger.info(f'sleeping {wait_sec} sec. Next launch time: {next_launch_time.strftime(PRINTED_DATE_FORMAT)}')
+                time.sleep(wait_sec)
+                self.run_live()
+            except Exception as e:
+                exception_class = e.__class__.__name__
+                exception_message = str(e)
+                self.logger.info(f"Caught an exception of type {exception_class}: {exception_message}."
+                                 f"Wait 60 sec & retry")
+                time.sleep(60)
 
     def buy(self):
         # Get the current token price in the base symbol
