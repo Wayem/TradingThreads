@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -176,6 +177,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         df_with_indicators['Buy'] = False
         df_with_indicators['Stop loss'] = False
         df_with_indicators['Take profit'] = False
+        df_with_indicators['In position'] = False
 
         def process_row(row):
             nonlocal self
@@ -265,8 +267,11 @@ class CallStrategyAtClose(BaseStrategyThread):
             except Exception as e:
                 exception_class = e.__class__.__name__
                 exception_message = str(e)
-                self.logger.info(f"Caught an exception of type {exception_class}: {exception_message}."
-                                 f"Wait 60 sec & retry")
+                self.logger.info(f"Caught an exception of type {exception_class}: {exception_message}.")
+                if exception_class == "ValueError" and exception_message == "No objects to concatenate":
+                    self.logger.info('rebooting')
+                    os.system('sudo reboot')
+                self.logger.info(f"Wait 60 sec & retry")
                 time.sleep(60)
 
     def buy(self):

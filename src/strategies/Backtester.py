@@ -21,6 +21,9 @@ class Backtester():
             df_with_buy_sl_tp_columns = strategy.run()
             self.dct_of_df_with_buy_sl_tp_columns.update({strategy.name: df_with_buy_sl_tp_columns})
             self.add_performance_column(strategy_name)
+
+            self.dct_of_df_with_buy_sl_tp_columns[strategy_name].to_csv(f"backtest_{strategy_name}_{strategy.symbol}")
+
             if self.plot:
                 plot_close_price_with_signals(df_with_buy_sl_tp_columns)
                 self.plot_performance(strategy_name)
