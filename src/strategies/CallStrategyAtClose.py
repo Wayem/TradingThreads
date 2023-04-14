@@ -180,10 +180,13 @@ class CallStrategyAtClose(BaseStrategyThread):
         df_with_indicators['In position'] = False
 
         def process_row(row):
+            just_bought = False
             nonlocal self
             # Buy
             if self.buy_condition(row):
                 row['Buy'] = True
+                if not(self.in_position):
+                    just_bought = True
                 self.in_position = True
                 self.last_buy_price = row['Close']
 
@@ -198,6 +201,7 @@ class CallStrategyAtClose(BaseStrategyThread):
                     row['Take profit'] = True
                     self.in_position = False
 
+            row['In position'] = False if just_bought else self.in_position
             return row
 
         df_with_indicators = df_with_indicators.apply(process_row, axis=1)
@@ -243,6 +247,7 @@ class CallStrategyAtClose(BaseStrategyThread):
                 if df_with_buy_sl_tp_columns.iloc[-1]['Buy']:
                     self.logger.info("Got buy signal. Let's go !")
                     self.buy()
+        self.logger.info(f'x-mbx-used-weight-1m: {self.exchange_client._get_current_weight}')
 
     def schedule_trading_strategy(self):
         assert self.short_interval[-1] == 'm', "short interval must be minute"

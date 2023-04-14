@@ -68,9 +68,9 @@ def plot_close_price_with_signals(df_with_buy_sl_tp_columns):
     ax.legend(loc='best')
 
     # Plot Buy signals
-    ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Buy']].index,
-               df_with_buy_sl_tp_columns.loc[df_with_buy_sl_tp_columns['Buy']].Close, label='Buy', marker='^',
-               color='black')
+    buy_signals = df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Buy'] & ~df_with_buy_sl_tp_columns['In position']]
+    ax.scatter(buy_signals.index,
+               buy_signals.Close, label='Buy', marker='^', color='black')
 
     # Plot SL signals
     ax.scatter(df_with_buy_sl_tp_columns[df_with_buy_sl_tp_columns['Stop loss']].index,

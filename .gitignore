@@ -3,3 +3,4 @@ __pycache__/
 logs/
 *.csv
 params.yaml
+test.py

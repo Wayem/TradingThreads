@@ -54,7 +54,7 @@ class BinanceAPIClient:
         query_string = urlencode(data)
         return hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    def _request(self, method, endpoint, params=None, signed=True):
+    def _request(self, method, endpoint, params=None, signed=True, return_weight = False):
         url = self.base_url + endpoint
         if params is None:
             params = {}
@@ -73,6 +73,9 @@ class BinanceAPIClient:
         if response.status_code != 200:
             raise Exception(f'Request failed with status code {response.status_code}: {response.content}')
 
+        weight = response.headers['x-mbx-used-weight-1m']
+        if return_weight:
+            return response.json(), weight
         return response.json()
 
     def _get_account_info(self):
@@ -82,6 +85,11 @@ class BinanceAPIClient:
     def _get_all_tickers(self):
         url = f"{self.base_url}/api/v3/ticker/price"
         return requests.get(url).json()
+
+    def _get_current_weight(self):
+        url = "/api/v3/ping"
+        _, weight = self._request("GET", url, return_weight=True, signed=False)
+        return weight
 
     def get_historical_data(self, symbol: str, interval: str, start_time: datetime,
                             end_time: datetime = datetime.now()) -> pd.DataFrame:
