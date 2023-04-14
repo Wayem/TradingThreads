@@ -50,8 +50,5 @@ if __name__ == "__main__":
                              base_symbol = "EUR",
                              symbol= "BNBEUR",
                              mode='live')
-
-    print(s2.get_df_with_buy_sl_tp_columns())
-    sys.exit()
     runstep("live s2", s2.run)
     logger.info("Done.")
