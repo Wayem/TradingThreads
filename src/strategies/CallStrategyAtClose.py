@@ -247,7 +247,7 @@ class CallStrategyAtClose(BaseStrategyThread):
                 if df_with_buy_sl_tp_columns.iloc[-1]['Buy']:
                     self.logger.info("Got buy signal. Let's go !")
                     self.buy()
-        self.logger.info(f'x-mbx-used-weight-1m: {self.exchange_client._get_current_weight}')
+        self.logger.info(f'x-mbx-used-weight-1m: {self.exchange_client._get_current_weight()}')
 
     def schedule_trading_strategy(self):
         assert self.short_interval[-1] == 'm', "short interval must be minute"
