@@ -288,9 +288,8 @@ class CallStrategyAtClose(BaseStrategyThread):
                 token_price_base = float(price['price'])
                 break
 
-        # Define the prices for & quantity the OCO order
+        # Define the prices & quantity for the OCO order
         ## <oco>
-        oco_token_quantity = self.base_symbol_quantity / token_price_base
         stop_limit_price = token_price_base * (1 - self.stop_loss_threshold)
         stop_price = token_price_base * (1 - self.stop_loss_threshold * 0.984)
         take_profit_price = token_price_base * (1 + self.take_profit_threshold)
@@ -298,8 +297,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         computed_prices_str = ','.join([f"token_price_base: {token_price_base}",
                                         f"stop_limit_price: {stop_limit_price}",
                                         f"stop_price: {stop_price}",
-                                        f"take_profit_price: {take_profit_price}",
-                                        f"quantity: {oco_token_quantity}"])
+                                        f"take_profit_price: {take_profit_price}"])
         self.logger.info(f'computed prices: {computed_prices_str}')
         ## <oco>
 
@@ -309,15 +307,13 @@ class CallStrategyAtClose(BaseStrategyThread):
         # 1. place and log market order
         # <market>
         order_id = f'{self.strategy_name}_{datetime.now().strftime("%Y%m%d%H%M%S%f")}'
-        self.logger.info(f'placing maket {order_id} for {self.base_symbol_quantity}{self.base_symbol}')
+        self.logger.info(f'placing market {order_id} for {self.base_symbol_quantity}{self.base_symbol}')
         executed_qty, last_buy_price = self.exchange_client.place_vanilla_order('MARKET', 'BUY', self.token,
                                                                                 self.base_symbol,
                                                                                 amount_base=self.base_symbol_quantity,
                                                                                 custom_order_id=order_id)
         self.order_ids.append(order_id)
         self._save_order_id_to_cache(order_id)
-
-        self.base_symbol_quantity = executed_qty
         # </market>
 
         self.logger.info(
@@ -335,7 +331,7 @@ class CallStrategyAtClose(BaseStrategyThread):
                 self.exchange_client.place_oco_order(side='SELL',
                                                      token=self.token,
                                                      base_symbol=self.base_symbol,
-                                                     quantity=oco_token_quantity,
+                                                     quantity=executed_qty,
                                                      stop_price=stop_price,
                                                      stop_limit_price=stop_limit_price,
                                                      take_profit_price=take_profit_price,
