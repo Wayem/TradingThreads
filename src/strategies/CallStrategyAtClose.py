@@ -61,13 +61,10 @@ class CallStrategyAtClose(BaseStrategyThread):
         ##
 
     def is_in_position(self):
-        self.logger.info(f'{self.name} not in position')
         open_orders = self.exchange_client.get_open_orders(self.token, self.base_symbol, self.strategy_name)
-
         for order in open_orders:
             if order.get("clientOrderId", "") in self.order_ids:
                 return True
-
         return False
 
     def _save_order_id_to_cache(self, order_id):
@@ -240,6 +237,7 @@ class CallStrategyAtClose(BaseStrategyThread):
         if self.is_in_position():
             self.logger.info(f"{self.name} already in position. doing nothing")
         else:
+            self.logger.info(f'{self.name} not in position')
             df_with_buy_sl_tp_columns = self.get_df_with_buy_sl_tp_columns()
 
             if self.is_current_time_close_to_last_row(df_with_buy_sl_tp_columns):
