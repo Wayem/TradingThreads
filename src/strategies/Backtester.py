@@ -1,6 +1,6 @@
 from typing import List
 from src.strategies import BaseStrategyThread
-from src.strategies.CallStrategyAtClose import CallStrategyAtClose
+from src.strategies.MarketBuyOcoSellAtClose import CallStrategyAtClose
 import matplotlib.pyplot as plt
 
 from src.utils import plot_close_price_with_signals
@@ -92,7 +92,7 @@ class Backtester():
 def main():
     client = None
 
-    s2 = CallStrategyAtClose(name="oco_scalp",
+    s2 = CallStrategyAtClose(name="oco_scalp_earlier",
                              initial_investment_in_base_symbol_quantity= 100,
                              long_interval='1d',
                              medium_interval='1h',
@@ -100,7 +100,8 @@ def main():
                              tp_threshold=0.0055,
                              sl_ratio_to_tp_threshold=3,
                              rsi_oversold=50,
-                             consecutive_hist_before_momentum=2,
+                             rsi_overbought=60,
+                             consecutive_hist_before_momentum=4,
                              exchange_client= client,
                              token = "BNB",
                              base_symbol = "EUR",

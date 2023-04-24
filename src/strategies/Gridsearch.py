@@ -2,7 +2,7 @@ from tqdm import tqdm
 import pickle
 
 from src.strategies.Backtester import Backtester
-from src.strategies.CallStrategyAtClose import CallStrategyAtClose
+from src.strategies.MarketBuyOcoSellAtClose import CallStrategyAtClose
 
 
 def gridsearch(exchange_client, symbols, long_intervals, medium_intervals, short_intervals, tp_thresholds,

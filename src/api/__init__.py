@@ -361,10 +361,33 @@ class BinanceAPIClient:
 
         return df
 
-    def get_open_orders(self, token, base_symbol, strategy_name):
+    def get_open_orders(self, token, base_symbol):
         open_orders = self._request("GET", "/api/v3/openOrders", {"symbol": token + base_symbol})
 
         return open_orders
+
+    def get_historical_orders(self, token, base_symbol, strategy_name, order_id_prefix=None):
+        symbol = token + base_symbol
+        all_orders = self._request("GET", "/api/v3/allOrders", {"symbol": symbol})
+
+        # Filter orders by the custom order ID prefix
+        if order_id_prefix:
+            limit_orders = [order for order in all_orders if order["clientOrderId"].startswith(order_id_prefix) and order["type"] == "LIMIT_MAKER"]
+
+            # Find the associated STOP_LIMIT orders using the orderListId
+            stop_limit_orders = []
+            for limit_order in limit_orders:
+                order_list_id = limit_order["orderListId"]
+                if order_list_id != -1:
+                    associated_stop_limit_orders = [order for order in all_orders if order["orderListId"] == order_list_id and order["type"] == "STOP_LOSS_LIMIT"]
+                    stop_limit_orders.extend(associated_stop_limit_orders)
+
+            historical_orders = limit_orders + stop_limit_orders
+        else:
+            historical_orders = all_orders
+
+        return historical_orders
+
 
     def get_symbol_filters(self, symbol):
         endpoint = "/api/v3/exchangeInfo"

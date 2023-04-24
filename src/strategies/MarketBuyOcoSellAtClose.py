@@ -28,6 +28,7 @@ class CallStrategyAtClose(BaseStrategyThread):
                  sl_ratio_to_tp_threshold=1.5,
                  mode="backtest",
                  rsi_oversold=50,
+                 rsi_overbought=60,
                  consecutive_hist_before_momentum=3):
         super().__init__(name=name, exchange_client=exchange_client, mode=mode)
         assert mode in KNOWN_MODES, f'strategy mode must be one of {KNOWN_MODES}'
@@ -57,6 +58,7 @@ class CallStrategyAtClose(BaseStrategyThread):
 
         ## Tuning Params
         self.rsi_oversold = rsi_oversold
+        self.rsi_overbought = rsi_overbought
         self.consecutive_hist_before_momentum = consecutive_hist_before_momentum
         ##
 
@@ -128,15 +130,18 @@ class CallStrategyAtClose(BaseStrategyThread):
     def add_signals_to_data_frames(self, df_short, df_medium, df_long):
         short_df_with_signals = add_indicators_signals(df_short,
                                                        prefix=self.short_interval,
-                                                       rsi_oversold=self.rsi_oversold)
+                                                       rsi_oversold=self.rsi_oversold,
+                                                       rsi_overbought=self.rsi_overbought)
 
         medium_df_with_signals = add_indicators_signals(df_medium,
                                                         prefix=self.medium_interval,
-                                                        rsi_oversold=self.rsi_oversold)
+                                                        rsi_oversold=self.rsi_oversold,
+                                                        rsi_overbought=self.rsi_overbought)
 
         long_df_with_signals = add_indicators_signals(df_long,
                                                       prefix=self.long_interval,
-                                                      rsi_oversold=self.rsi_oversold)
+                                                      rsi_oversold=self.rsi_oversold,
+                                                      rsi_overbought=self.rsi_overbought)
 
         return short_df_with_signals, medium_df_with_signals, long_df_with_signals
 
@@ -205,9 +210,13 @@ class CallStrategyAtClose(BaseStrategyThread):
         return df_with_indicators
 
     def buy_condition(self, row):
+        # long_term_cond = row[f'{self.long_interval}_ema_short_above_long_{SIGNAL_PREFIX}']
+        # medium_term_cond = row[f'{self.medium_interval}_momentum_up_{SIGNAL_PREFIX}']
+        # short_term_cond = row[f'{self.short_interval}_oversold_{SIGNAL_PREFIX}']
+
         long_term_cond = row[f'{self.long_interval}_ema_short_above_long_{SIGNAL_PREFIX}']
-        medium_term_cond = row[f'{self.medium_interval}_momentum_up_{SIGNAL_PREFIX}']
-        short_term_cond = row[f'{self.short_interval}_oversold_{SIGNAL_PREFIX}']
+        medium_term_cond = row[f'{self.medium_interval}_momentum_down_{SIGNAL_PREFIX}']
+        short_term_cond = row[f'{self.short_interval}_overbought_{SIGNAL_PREFIX}']
 
         return long_term_cond & medium_term_cond & short_term_cond
 

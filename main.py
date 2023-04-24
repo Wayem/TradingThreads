@@ -2,7 +2,7 @@ import os
 import logging
 import sys
 
-from src.strategies.CallStrategyAtClose import CallStrategyAtClose
+from src.strategies.MarketBuyOcoSellAtClose import CallStrategyAtClose
 from src.utils.kp_secrets import extract_kp_secrets
 from src.api import BinanceAPIClient
 

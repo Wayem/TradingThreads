@@ -173,10 +173,10 @@ def add_indicators(df, prefix, consecutive_hist_before_momentum):
     return df
 
 
-def get_indicators_signals(row: pd.Series, prefix, rsi_oversold) -> Dict[str, bool]:
+def get_indicators_signals(row: pd.Series, prefix, rsi_oversold, rsi_overbought) -> Dict[str, bool]:
     short_above_long = row[f'{prefix}_Short_EMA'] > row[f'{prefix}_Long_EMA']
     oversold = row[f'{prefix}_RSI'] < rsi_oversold
-    overbought = row[f'{prefix}_RSI'] > 70
+    overbought = row[f'{prefix}_RSI'] > rsi_overbought
     momentum_up = row[f'{prefix}_MACD_UP_Momentum']
     momentum_down = row[f'{prefix}_MACD_DOWN_Momentum']
 
@@ -188,10 +188,11 @@ def get_indicators_signals(row: pd.Series, prefix, rsi_oversold) -> Dict[str, bo
     return {f'{prefix}_{key}_{SIGNAL_PREFIX}': value for key, value in ret.items()}
 
 
-def add_indicators_signals(df: pd.DataFrame, prefix, rsi_oversold) -> pd.DataFrame:
+def add_indicators_signals(df: pd.DataFrame, prefix, rsi_oversold, rsi_overbought) -> pd.DataFrame:
     signals = df.apply(lambda x: get_indicators_signals(x,
                                                         prefix=prefix,
-                                                        rsi_oversold=rsi_oversold),
+                                                        rsi_oversold=rsi_oversold,
+                                                        rsi_overbought=rsi_overbought),
                        axis=1)
 
     signals_df = pd.DataFrame.from_records(signals.values, index=signals.index)
