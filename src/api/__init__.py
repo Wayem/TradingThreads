@@ -361,7 +361,7 @@ class BinanceAPIClient:
 
         return df
 
-    def get_open_orders(self, token, base_symbol):
+    def get_open_orders(self, token, base_symbol, strategy_name):
         open_orders = self._request("GET", "/api/v3/openOrders", {"symbol": token + base_symbol})
 
         return open_orders
